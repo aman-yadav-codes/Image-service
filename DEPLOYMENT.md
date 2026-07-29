@@ -240,6 +240,91 @@ MinIO Bucket: images
 
 ---
 
+## 8.1. Host-Mounted Persistent Storage & Bind Mounts
+
+To ensure production-grade data safety, this service uses **host-mounted bind mounts** instead of Docker-managed named volumes for all stateful services (`redis` and `minio`).
+
+### Why Bind Mounts are Used
+* **Container Lifecycles Decoupled**: The database state (Redis) and object assets (MinIO) reside directly on the host file system. Rebuilding, updating, or deleting containers will **never** cause data loss.
+* **Easy Backups & Inspections**: Since files are exposed directly on the host's directories, standard system backup agents, sync tools, and monitoring software can interact with them directly without going through Docker volume drivers.
+* **Stateless App Containers**: All logic containers (`image-api`, `image-worker`, `minio-init`) remain strictly stateless and disposable.
+
+### Where Data is Stored
+Persistent storage paths are configured inside the `.env` file via `DATA_ROOT`.
+Default local development structure:
+```text
+image-service/
+    ├── data/
+    │   ├── minio/    ← All uploaded originals and processed webp variants
+    │   └── redis/    ← Redis append-only files (AOF) / dump.rdb state
+```
+Production Ubuntu Server layout:
+```text
+/opt/image-service/
+    ├── docker-compose.yml
+    └── .env
+
+/data/
+    ├── minio/        ← Persistent object files
+    ├── redis/        ← Persistent queue and status database files
+    └── backups/      ← Dedicated backup archives folder
+```
+
+### Backing Up MinIO & Redis
+Since all data resides on the host, performing backups is straightforward:
+
+1. **MinIO (Object Files)**:
+   You can perform a hot backup while MinIO is running using `tar` or `rsync`:
+   ```bash
+   # Create a compressed backup of all images
+   sudo tar -czf /data/backups/minio-backup-$(date +%F).tar.gz -C /data/minio .
+   ```
+   Or using the MinIO client (`mc`) for a live snapshot:
+   ```bash
+   mc mirror local/images /path/to/backup-destination
+   ```
+
+2. **Redis (DB state)**:
+   Redis periodically saves state to `dump.rdb` inside `/data/redis/`. To back it up:
+   ```bash
+   sudo cp /data/redis/dump.rdb /data/backups/redis-backup-$(date +%F).rdb
+   ```
+
+### Server Migration Guide
+To migrate the entire image service to a new server:
+
+1. **Stop the Service on the old server**:
+   ```bash
+   cd /opt/image-service
+   docker compose down
+   ```
+2. **Transfer Persistent Data**:
+   Compress and copy `/data` to the new server:
+   ```bash
+   tar -czf data-migration.tar.gz /data
+   scp data-migration.tar.gz user@new-server:/tmp/
+   ```
+3. **Transfer Code Configuration**:
+   ```bash
+   scp -r /opt/image-service user@new-server:/opt/
+   ```
+4. **Restore on New Server**:
+   On the new server, extract the data archive:
+   ```bash
+   sudo mkdir -p /data
+   sudo tar -xzf /tmp/data-migration.tar.gz -C /
+   ```
+5. **Start Services**:
+   ```bash
+   cd /opt/image-service
+   docker compose up -d --build --scale image-worker=2
+   ```
+
+---
+
+
+---
+
 ## 9. Logs
 
 ```bash
@@ -261,11 +346,17 @@ docker compose logs -f minio
 ## 10. Stop / Restart / Reset
 
 ```bash
-# Stop all (keeps MinIO data volume)
+# Stop all containers (keeps MinIO and Redis host data)
 docker compose down
 
-# Stop + delete ALL data (MinIO + Redis volumes)
+# Stop containers (named volumes are not used, so -v will NOT delete uploaded images)
 docker compose down -v
+
+# Completely delete ALL host persistent data (WARNING: permanent data loss!)
+# Run this only if you want to completely wipe the installation.
+sudo rm -rf ./data
+# or in production:
+# sudo rm -rf /data
 
 # Restart a single service
 docker compose restart image-api
@@ -276,15 +367,15 @@ docker compose restart image-worker
 
 ## 11. Production Checklist
 
-- [ ] Change `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD` to strong credentials
-- [ ] Set `REDIS_PASSWORD`
+- [ ] Change `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` to strong secure keys (e.g. `MINIO_SECRET_KEY=Y7p#s91L!2rQx8M@vK4z`)
+- [ ] Set `REDIS_PASSWORD` to a strong production password
 - [ ] Set `NODE_ENV=production`
-- [ ] Set `LOG_PRETTY=false` (JSON logs for aggregators like Loki/ELK)
-- [ ] Update `MINIO_PUBLIC_ENDPOINT` to your public domain (e.g. `https://cdn.yourdomain.com`)
-- [ ] Mount `minio_data` volume to a persistent disk
+- [ ] Set `LOG_PRETTY=false` (Enables JSON logs for aggregators like Loki/ELK)
+- [ ] Update `MINIO_PUBLIC_ENDPOINT` to your public CDN domain (e.g. `https://cdn.yourdomain.com`)
+- [ ] Configure `DATA_ROOT=/data` to point to your dedicated persistent host storage directory
 - [ ] Put Nginx / Traefik in front of the API (port 4000 → 80/443)
 - [ ] Use MinIO's HTTPS endpoint (`MINIO_USE_SSL=true`) in production
-- [ ] Scale workers: `--scale image-worker=<N>` where N ≈ CPU cores
+- [ ] Scale workers: `docker compose up -d --scale image-worker=2` (recommended for 2-core VPS)
 
 ---
 

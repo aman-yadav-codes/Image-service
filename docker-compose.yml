@@ -15,7 +15,7 @@ services:
     ports:
       - "${REDIS_PORT}:6379"
     volumes:
-      - redis_data:/data
+      - "${REDIS_DATA_PATH}:/data"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"]
       interval: 10s
@@ -38,7 +38,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
-      - minio_data:/data
+      - "${MINIO_DATA_PATH}:/data"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -162,13 +162,6 @@ services:
         limits:
           cpus: "${WORKER_CPU_LIMIT}"
           memory: "${WORKER_MEMORY_LIMIT}"
-
-# ─── Volumes ──────────────────────────────────────────────────────────────────
-volumes:
-  redis_data:
-    driver: local
-  minio_data:
-    driver: local
 
 # ─── Networks ─────────────────────────────────────────────────────────────────
 networks:
