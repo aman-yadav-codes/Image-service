@@ -7,10 +7,15 @@ import { errorHandler } from '../middleware/errorHandler.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 
+import { metricsMiddleware } from '../utils/metrics.js';
+
 // ─── App Factory ──────────────────────────────────────────────────────────────
 
 export function createApp() {
   const app = express();
+
+  // ── Metrics ─────────────────────────────────────────────────────────────────
+  app.use(metricsMiddleware);
 
   // ── Security ────────────────────────────────────────────────────────────────
   app.use(helmet());

@@ -8,15 +8,23 @@ import {
   handleHealth,
 } from '../controllers/imageController.js';
 
+import { handleMetrics } from '../utils/metrics.js';
+
 export const imageRouter = Router();
 
-// ─── Health ───────────────────────────────────────────────────────────────────
+// ─── Health & Metrics ──────────────────────────────────────────────────────────
 
 /**
  * @route   GET /health
  * @desc    Liveness probe — no dependencies checked
  */
 imageRouter.get('/health', handleHealth);
+
+/**
+ * @route   GET /metrics
+ * @desc    Expose Prometheus metrics endpoint
+ */
+imageRouter.get('/metrics', handleMetrics);
 
 // ─── Upload ───────────────────────────────────────────────────────────────────
 

@@ -9,6 +9,7 @@ import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import type { ImageMetadata, ImageResponse, VariantUrls } from '../types/index.js';
 import { IMAGE_VARIANTS } from '../types/index.js';
+import { imageUploadsTotal, imageUploadSizeBytes } from '../utils/metrics.js';
 
 // ─── Upload ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,10 @@ export async function uploadImage(input: UploadInput): Promise<ImageResponse> {
 
   // ── Store Original ────────────────────────────────────────────────────────
   await storage.save(imageId, originalFilename, input.buffer, input.mimetype);
+
+  // ── Record Metrics ────────────────────────────────────────────────────────
+  imageUploadsTotal.inc({ status: 'success' });
+  imageUploadSizeBytes.observe(input.size);
 
   // ── Persist Metadata ──────────────────────────────────────────────────────
   const now = nowIso();
