@@ -1,8 +1,8 @@
 // ─── Image Variants ──────────────────────────────────────────────────────────
 
-export type ImageVariant = 'display' | 'thumbnail';
+export type ImageVariant = 'thumbnail' | 'display' | 'large' | 'print';
 
-export const IMAGE_VARIANTS: ImageVariant[] = ['display', 'thumbnail'];
+export const IMAGE_VARIANTS: ImageVariant[] = ['thumbnail', 'display', 'large', 'print'];
 
 // ─── Job Payload ─────────────────────────────────────────────────────────────
 
@@ -58,8 +58,10 @@ export interface ImageMetadata {
 // ─── API Response ─────────────────────────────────────────────────────────────
 
 export interface VariantUrls {
-  display: string;
   thumbnail: string;
+  display: string;
+  large: string;
+  print: string;
 }
 
 export interface ImageResponse {

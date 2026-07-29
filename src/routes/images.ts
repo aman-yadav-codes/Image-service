@@ -52,10 +52,10 @@ imageRouter.post('/images/upload', upload.single('image'), handleUpload);
  * are matched here first, not treated as image IDs.
  */
 imageRouter.get(
-  /^\/images\/(.+\.webp)$/,
+  /^\/images\/(.+\.(webp|jpg|jpeg|png))$/,
   (req, res, next) => {
     // Extract the captured filename from the regex match
-    const match = req.path.match(/\/images\/(.+\.webp)$/);
+    const match = req.path.match(/\/images\/(.+\.(webp|jpg|jpeg|png))$/);
     if (match) {
       req.params['seoFilename'] = match[1];
     }

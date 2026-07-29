@@ -60,11 +60,17 @@ export function extractShortId(imageId: string): string {
  *   buildPublicFilename("blue-running-shoes", "thumbnail", "550e8400")
  *     → "blue-running-shoes-thumbnail-550e8400.webp"
  */
+import { config } from '../config/index.js';
+
 export function buildPublicFilename(
   slug: string,
   variant: ImageVariant,
   shortId: string,
 ): string {
+  if (variant === 'print') {
+    const ext = config.presets.print.format === 'png' ? 'png' : 'jpg';
+    return `${slug}-${variant}-${shortId}.${ext}`;
+  }
   return `${slug}-${variant}-${shortId}.webp`;
 }
 

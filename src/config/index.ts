@@ -79,14 +79,22 @@ export const config = {
   },
 
   presets: {
+    thumbnail: {
+      width:   optionalNumber('THUMBNAIL_WIDTH', 256),
+      height:  optionalNumber('THUMBNAIL_HEIGHT', 256),
+      quality: optionalNumber('THUMBNAIL_QUALITY', 75),
+    },
     display: {
-      width:   optionalNumber('DISPLAY_WIDTH', 1920),
+      width:   optionalNumber('DISPLAY_WIDTH', 1280),
       quality: optionalNumber('DISPLAY_QUALITY', 82),
     },
-    thumbnail: {
-      width:   optionalNumber('THUMBNAIL_WIDTH', 300),
-      height:  optionalNumber('THUMBNAIL_HEIGHT', 300),
-      quality: optionalNumber('THUMBNAIL_QUALITY', 75),
+    large: {
+      width:   optionalNumber('LARGE_WIDTH', 1920),
+      quality: optionalNumber('LARGE_QUALITY', 85),
+    },
+    print: {
+      quality: optionalNumber('PRINT_QUALITY', 95),
+      format:  optional('PRINT_FORMAT', 'jpeg') as 'jpeg' | 'png',
     },
   },
 

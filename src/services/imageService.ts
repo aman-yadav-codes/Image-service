@@ -123,8 +123,10 @@ function toResponse(meta: ImageMetadata): ImageResponse {
   // Public variant URLs use the SEO-friendly pattern
   const variants: VariantUrls | null = allVariantsDone
     ? {
-        display:   meta.publicFilenames.display,
         thumbnail: meta.publicFilenames.thumbnail,
+        display:   meta.publicFilenames.display,
+        large:     meta.publicFilenames.large,
+        print:     meta.publicFilenames.print,
       }
     : null;
 

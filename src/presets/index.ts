@@ -1,6 +1,8 @@
 import type { SharpPreset, ImageVariant } from '../types/index.js';
 import { displayPreset } from './display.js';
 import { thumbnailPreset } from './thumbnail.js';
+import { largePreset } from './large.js';
+import { printPreset } from './print.js';
 
 /**
  * Central preset registry.
@@ -12,8 +14,10 @@ import { thumbnailPreset } from './thumbnail.js';
  *   — No other changes needed.
  */
 const presetMap: Record<ImageVariant, SharpPreset> = {
-  display: displayPreset,
   thumbnail: thumbnailPreset,
+  display:   displayPreset,
+  large:     largePreset,
+  print:     printPreset,
 };
 
 export function getPreset(variant: ImageVariant): SharpPreset {
@@ -22,4 +26,4 @@ export function getPreset(variant: ImageVariant): SharpPreset {
   return preset;
 }
 
-export { displayPreset, thumbnailPreset };
+export { displayPreset, thumbnailPreset, largePreset, printPreset };

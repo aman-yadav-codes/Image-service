@@ -2,6 +2,8 @@ import { Queue, QueueEvents } from 'bullmq';
 import { createRedisConnection } from '../config/redis.js';
 import { config } from '../config/index.js';
 import type { ProcessingJobData } from '../types/index.js';
+import { IMAGE_VARIANTS } from '../types/index.js';
+
 
 /**
  * BullMQ queue for image processing jobs.
@@ -47,9 +49,7 @@ export async function enqueueProcessingJobs(
   originalFilename: string,
   originalMimeType: string,
 ): Promise<void> {
-  const variants = ['display', 'thumbnail'] as const;
-
-  const jobs = variants.map((variant) => ({
+  const jobs = IMAGE_VARIANTS.map((variant) => ({
     name: `process:${variant}`,
     data: {
       imageId,

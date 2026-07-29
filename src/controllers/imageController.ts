@@ -5,6 +5,7 @@ import { AppError } from '../utils/errors.js';
 import { storage } from '../storage/index.js';
 import { IMAGE_VARIANTS } from '../types/index.js';
 import type { ImageVariant } from '../types/index.js';
+import { getPreset } from '../presets/index.js';
 
 // ─── POST /images/upload ──────────────────────────────────────────────────────
 
@@ -60,7 +61,8 @@ export async function handleServeVariant(req: Request, res: Response, next: Next
       );
     }
 
-    const filename   = `${variant}.webp`;
+    const preset     = getPreset(variant as ImageVariant);
+    const filename   = preset.filename;
     const fileExists = await storage.exists(id, filename);
 
     if (!fileExists) {
@@ -70,7 +72,7 @@ export async function handleServeVariant(req: Request, res: Response, next: Next
       );
     }
 
-    setImageHeaders(res, id, variant);
+    setImageHeaders(res, id, variant, filename);
     const stream = await storage.createReadStream(id, filename);
     stream.on('error', (err) => next(err));
     stream.pipe(res);
@@ -88,8 +90,8 @@ export async function handleServeBySeoFilename(req: Request, res: Response, next
   try {
     const { seoFilename } = req.params as { seoFilename: string };
 
-    // Append .webp if the router strips it
-    const publicFilename = seoFilename.endsWith('.webp') ? seoFilename : `${seoFilename}.webp`;
+    // The router regexp captures the full public filename (with extension)
+    const publicFilename = seoFilename;
 
     // O(1) Redis reverse-lookup
     const ref = await getPublicFileRef(publicFilename);
@@ -110,7 +112,7 @@ export async function handleServeBySeoFilename(req: Request, res: Response, next
       );
     }
 
-    setImageHeaders(res, ref.imageId, ref.variant);
+    setImageHeaders(res, ref.imageId, ref.variant, ref.storageFilename);
     res.setHeader('X-Public-Filename', publicFilename);
 
     const stream = await storage.createReadStream(ref.imageId, ref.storageFilename);
@@ -133,8 +135,15 @@ export function handleHealth(_req: Request, res: Response): void {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function setImageHeaders(res: Response, imageId: string, variant: string): void {
-  res.setHeader('Content-Type',    'image/webp');
+function setImageHeaders(res: Response, imageId: string, variant: string, filename: string): void {
+  let contentType = 'image/webp';
+  if (filename.endsWith('.png')) {
+    contentType = 'image/png';
+  } else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+    contentType = 'image/jpeg';
+  }
+
+  res.setHeader('Content-Type',    contentType);
   res.setHeader('Cache-Control',   'public, max-age=31536000, immutable');
   res.setHeader('X-Image-Id',      imageId);
   res.setHeader('X-Image-Variant', variant);
