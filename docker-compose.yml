@@ -47,6 +47,7 @@ services:
       start_period: 10s
     networks:
       - image-net
+      - observability-net
 
   # ─── Bucket Init (runs once, then exits) ──────────────────────────────────
   minio-init:
