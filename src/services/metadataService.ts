@@ -1,6 +1,7 @@
 import { redis } from '../config/redis.js';
 import type { ImageMetadata, ImageVariant, ImageStatus, PublicFileRef } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { getPreset } from '../presets/index.js';
 
 // ─── Keys & TTL ───────────────────────────────────────────────────────────────
 
@@ -113,10 +114,11 @@ export async function saveAllPublicFileRefs(
   const pipeline = redis.pipeline();
 
   for (const [variant, publicFilename] of Object.entries(publicFilenames)) {
+    const preset = getPreset(variant as ImageVariant);
     const ref: PublicFileRef = {
       imageId,
       variant:         variant as ImageVariant,
-      storageFilename: `${variant}.webp`,
+      storageFilename: preset.filename,
     };
     pipeline.setex(pubfileKey(publicFilename), TTL_SECONDS, JSON.stringify(ref));
   }
