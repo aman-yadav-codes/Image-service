@@ -250,44 +250,48 @@ To ensure production-grade data safety, this service uses **host-mounted bind mo
 * **Stateless App Containers**: All logic containers (`image-api`, `image-worker`, `minio-init`) remain strictly stateless and disposable.
 
 ### Where Data is Stored
-Persistent storage paths are configured inside the `.env` file via `DATA_ROOT`.
-Default local development structure:
-```text
-image-service/
-    ├── data/
-    │   ├── minio/    ← All uploaded originals and processed webp variants
-    │   └── redis/    ← Redis append-only files (AOF) / dump.rdb state
-```
-Production Ubuntu Server layout:
-```text
-/opt/image-service/
-    ├── docker-compose.yml
-    └── .env
+Persistent storage paths are configured inside the `.env` file via the `DATA_ROOT` variable.
 
-/data/
-    ├── minio/        ← Persistent object files
-    ├── redis/        ← Persistent queue and status database files
-    └── backups/      ← Dedicated backup archives folder
-```
+* **Windows Development**:
+  ```env
+  DATA_ROOT=C:/docker-data
+  ```
+  Ensure you create the following directory structure on your host machine before starting:
+  ```text
+  C:\docker-data\
+  ├── minio
+  ├── redis
+  ├── logs
+  └── backups
+  ```
+
+* **Linux Production (e.g. Ubuntu)**:
+  ```env
+  DATA_ROOT=/srv/image-service
+  ```
+  Run the following commands on your server to set up the directories and permissions:
+  ```bash
+  sudo mkdir -p /srv/image-service/{minio,redis,logs,backups}
+  sudo chown -R $USER:$USER /srv/image-service
+  ```
 
 ### Backing Up MinIO & Redis
-Since all data resides on the host, performing backups is straightforward:
+Since all data resides on the host filesystem under `DATA_ROOT`, backups are simple:
 
 1. **MinIO (Object Files)**:
-   You can perform a hot backup while MinIO is running using `tar` or `rsync`:
+   You can perform a hot backup while MinIO is running:
    ```bash
    # Create a compressed backup of all images
-   sudo tar -czf /data/backups/minio-backup-$(date +%F).tar.gz -C /data/minio .
+   tar -czf /srv/image-service/backups/minio-backup-$(date +%F).tar.gz -C /srv/image-service/minio .
    ```
-   Or using the MinIO client (`mc`) for a live snapshot:
+   Or mirror the bucket to an external endpoint using `mc`:
    ```bash
-   mc mirror local/images /path/to/backup-destination
+   mc mirror local/images /srv/image-service/backups/mirror-dest
    ```
 
-2. **Redis (DB state)**:
-   Redis periodically saves state to `dump.rdb` inside `/data/redis/`. To back it up:
+2. **Redis (Database state)**:
    ```bash
-   sudo cp /data/redis/dump.rdb /data/backups/redis-backup-$(date +%F).rdb
+   cp /srv/image-service/redis/dump.rdb /srv/image-service/backups/redis-backup-$(date +%F).rdb
    ```
 
 ### Server Migration Guide
@@ -299,10 +303,10 @@ To migrate the entire image service to a new server:
    docker compose down
    ```
 2. **Transfer Persistent Data**:
-   Compress and copy `/data` to the new server:
+   Compress and copy `/srv/image-service` to the new server:
    ```bash
-   tar -czf data-migration.tar.gz /data
-   scp data-migration.tar.gz user@new-server:/tmp/
+   tar -czf migration-data.tar.gz /srv/image-service
+   scp migration-data.tar.gz user@new-server:/tmp/
    ```
 3. **Transfer Code Configuration**:
    ```bash
@@ -311,8 +315,9 @@ To migrate the entire image service to a new server:
 4. **Restore on New Server**:
    On the new server, extract the data archive:
    ```bash
-   sudo mkdir -p /data
-   sudo tar -xzf /tmp/data-migration.tar.gz -C /
+   sudo mkdir -p /srv/image-service
+   sudo tar -xzf /tmp/migration-data.tar.gz -C /
+   sudo chown -R $USER:$USER /srv/image-service
    ```
 5. **Start Services**:
    ```bash

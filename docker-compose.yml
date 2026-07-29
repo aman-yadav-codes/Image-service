@@ -15,7 +15,7 @@ services:
     ports:
       - "${REDIS_PORT}:6379"
     volumes:
-      - "${REDIS_DATA_PATH}:/data"
+      - "${DATA_ROOT}/redis:/data"
     healthcheck:
       test: ["CMD-SHELL", "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"]
       interval: 10s
@@ -38,7 +38,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     volumes:
-      - "${MINIO_DATA_PATH}:/data"
+      - "${DATA_ROOT}/minio:/data"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
