@@ -219,8 +219,10 @@ Both return `Content-Type: image/webp` with `Cache-Control: public, max-age=3153
 
 | Variant | API path | Output | Quality | Notes |
 |---|---|---|---|---|
-| `display` | `/images/:id/display` | 1920px max-width WebP | 82 | Preserves aspect ratio, no upscaling, EXIF rotate |
-| `thumbnail` | `/images/:id/thumbnail` | 300×300 WebP | 75 | Cover crop, entropy-based smart focus |
+| `thumbnail` | `/images/:id/thumbnail` | 256×256 WebP | 75 | Cover crop, entropy-based smart focus, perfect for lists & previews |
+| `display` | `/images/:id/display` | 1280px max-width WebP | 82 | Preserves aspect ratio, no upscaling, EXIF rotate, default for pages & sliders |
+| `large` | `/images/:id/large` | 1920px max-width WebP | 85 | Preserves aspect ratio, high resolution variant |
+| `print` | `/images/:id/print` | Full Resolution (JPEG/PNG) | 95 | No scaling, high-quality lossless PNG or MozJPEG, perfect for prints or downloads |
 
 ---
 
