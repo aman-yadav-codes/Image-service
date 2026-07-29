@@ -1,7 +1,16 @@
+# Root dependency and output directories
 node_modules/
 dist/
 storage/
 .env
 *.log
 data/
+temp.py
 
+# Nested dependencies and outputs
+**/node_modules/
+**/dist/
+**/.env
+**/*.log
+**/storage/
+**/data/
