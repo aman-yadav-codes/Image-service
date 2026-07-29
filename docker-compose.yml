@@ -78,12 +78,12 @@ services:
     container_name: image-service-api
     restart: unless-stopped
     ports:
-      - "${PORT}:${PORT}"
+      - "${PORT}:4000"
     environment:
       NODE_ENV: ${NODE_ENV}
       LOG_LEVEL: ${LOG_LEVEL}
       LOG_PRETTY: ${LOG_PRETTY}
-      PORT: ${PORT}
+      PORT: 4000
       HOST: "0.0.0.0"
       # Redis
       REDIS_HOST: ${REDIS_HOST}
@@ -125,13 +125,14 @@ services:
       minio-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:${PORT}/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 15s
     networks:
       - image-net
+      - observability-net
 
   # ─── Image Worker ────────────────────────────────────────────────────────────
   image-worker:
@@ -191,69 +192,12 @@ services:
           cpus: "${WORKER_CPU_LIMIT}"
           memory: "${WORKER_MEMORY_LIMIT}"
 
-  # ─── Grafana Loki (Log Aggregator) ─────────────────────────────────────────
-  loki:
-    image: ${LOKI_IMAGE}
-    container_name: image-service-loki
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
-    ports:
-      - "${LOKI_PORT}:3100"
-    volumes:
-      - "${DATA_ROOT}/loki:/loki"
-    networks:
-      - image-net
 
-  # ─── Grafana Promtail (Log Collector) ──────────────────────────────────────
-  promtail:
-    image: ${PROMTAIL_IMAGE}
-    container_name: image-service-promtail
-    restart: unless-stopped
-    command: -config.file=/etc/promtail/config.yml -config.expand-env=true
-    environment:
-      LOKI_CLIENT_URL: ${LOKI_CLIENT_URL}
-    volumes:
-      - ./promtail-config.yml:/etc/promtail/config.yml
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - loki
-    networks:
-      - image-net
-
-  # ─── Prometheus (Metrics Scraper) ──────────────────────────────────────────
-  prometheus:
-    image: ${PROMETHEUS_IMAGE}
-    container_name: image-service-prometheus
-    restart: unless-stopped
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-    ports:
-      - "${PROMETHEUS_PORT}:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - "${DATA_ROOT}/prometheus:/prometheus"
-    depends_on:
-      - image-api
-    networks:
-      - image-net
-
-  # ─── Grafana Dashboard ─────────────────────────────────────────────────────
-  grafana:
-    image: ${GRAFANA_IMAGE}
-    container_name: image-service-grafana
-    restart: unless-stopped
-    ports:
-      - "${GRAFANA_PORT}:3000"
-    volumes:
-      - "${DATA_ROOT}/grafana:/var/lib/grafana"
-    depends_on:
-      - prometheus
-      - loki
-    networks:
-      - image-net
 
 # ─── Networks ─────────────────────────────────────────────────────────────────
 networks:
   image-net:
     driver: bridge
+  observability-net:
+    name: observability-net
+    external: true
