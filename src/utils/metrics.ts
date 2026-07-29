@@ -15,9 +15,9 @@ client.collectDefaultMetrics({ register: registry });
 /** HTTP request duration tracker */
 const httpRequestDuration = new client.Histogram({
   name: 'http_request_duration_seconds',
-  help: 'Duration of HTTP requests in seconds',
+  help: 'HTTP request duration',
   labelNames: ['method', 'route', 'status_code'],
-  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 5],
 });
 registry.registerMetric(httpRequestDuration);
 
@@ -93,10 +93,9 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  const start = process.hrtime();
+  const end = httpRequestDuration.startTimer();
 
   res.on('finish', () => {
-    const duration = getDurationInSeconds(start);
     const route = req.route ? req.route.path : req.path;
     const labels = {
       method: req.method,
@@ -104,16 +103,11 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
       status_code: res.statusCode.toString(),
     };
 
-    httpRequestDuration.observe(labels, duration);
+    end(labels);
     httpRequestsTotal.inc(labels);
   });
 
   next();
-}
-
-function getDurationInSeconds(start: [number, number]): number {
-  const diff = process.hrtime(start);
-  return diff[0] + diff[1] / 1e9;
 }
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
