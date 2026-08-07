@@ -1,4 +1,5 @@
 # ─── Build Stage ──────────────────────────────────────────────────────────────
+
 FROM node:20-alpine AS builder
 
 WORKDIR /app
@@ -12,34 +13,43 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-# Prune dev dependencies
+# Remove dev dependencies
 RUN npm prune --omit=dev
 
 # ─── Production Stage ─────────────────────────────────────────────────────────
+
 FROM node:20-alpine AS production
 
-# Sharp requires these native libs on Alpine
-RUN apk add --no-cache vips-dev fftw-dev build-base python3
+# Runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    vips-dev \
+    fftw-dev \
+    build-base \
+    python3
 
 WORKDIR /app
 
-# Copy compiled output + production node_modules
+# Copy compiled application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
-# Create storage directory
+# Storage directory
 RUN mkdir -p /app/storage
 
-# Non-root user for security
+# Create non-root user
 RUN addgroup -g 1001 -S nodegroup && \
-    adduser  -u 1001 -S nodeuser -G nodegroup && \
+    adduser -u 1001 -S nodeuser -G nodegroup && \
     chown -R nodeuser:nodegroup /app
 
 USER nodeuser
 
 EXPOSE 4000
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 CMD wget -qO- http://127.0.0.1:4000/health >/dev/null || exit 1
+# Health Check
+HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:4000/health >/dev/null || exit 1
 
+# Start API
 CMD ["node", "dist/api/server.js"]
