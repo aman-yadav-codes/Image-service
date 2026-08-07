@@ -14,7 +14,7 @@ RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY src ./src
 
-# Build
+# Build TypeScript
 RUN npm run build
 
 # Remove dev dependencies
@@ -41,10 +41,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
-# Storage directory
+# Create storage directory
 RUN mkdir -p /app/storage
 
-# Non-root user
+# Create non-root user
 RUN addgroup -g 1001 -S nodegroup && \
     adduser -u 1001 -S nodeuser -G nodegroup && \
     chown -R nodeuser:nodegroup /app
@@ -55,7 +55,7 @@ EXPOSE 4000
 
 # Health Check
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=5 \
-  CMD ["curl","-fsS","http://127.0.0.1:4000/health"]
+  CMD ["curl", "-fsS", "http://127.0.0.1:4000/health"]
 
 # Start API
-CMD ["node","dist/api/server.js"]
+CMD ["node", "dist/api/server.js"]
