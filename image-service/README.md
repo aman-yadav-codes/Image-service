@@ -1,6 +1,6 @@
-# Image Processing Service
+﻿# Image Processing Microservice
 
-A production-ready, horizontally scalable image processing API built with Node.js, TypeScript, Sharp, BullMQ, Redis, and Docker.
+A production-ready, horizontally scalable image processing API built with Node.js, TypeScript, Sharp, BullMQ, Redis, and MinIO.
 
 ## Architecture
 
@@ -8,10 +8,10 @@ A production-ready, horizontally scalable image processing API built with Node.j
 POST /images/upload
        │
        ▼
- [image-api]
+ [image-api :4001]
   ├── Validate (MIME, size)
-  ├── Save original → storage/
-  ├── Enqueue BullMQ jobs
+  ├── Upload original → MinIO
+  ├── Enqueue BullMQ jobs (4 variants)
   └── Return 202 { id, status: "queued" }
 
        │
@@ -20,127 +20,86 @@ POST /images/upload
        │
        ▼
 [image-worker × N]
-  ├── Load original
-  ├── Apply Sharp preset
-  └── Save display.webp / thumbnail.webp
+  ├── Load original from MinIO
+  ├── Apply Sharp preset (thumbnail / display / large / print)
+  └── Save processed variants → MinIO
 
        │
        ▼
-GET /images/:id  →  { id, status, variants: { display, thumbnail } }
-GET /images/:id/display    →  Serves WebP + Cache-Control: immutable
-GET /images/:id/thumbnail  →  Serves WebP + Cache-Control: immutable
+GET /images/:id  →  { status, variants: { thumbnail, display, large, print } }
 ```
 
 ## Quick Start (Docker)
 
 ```bash
-# Build and start all services (2 workers by default)
-docker compose up --build
+cd Image-service
+cp .env.example .env
+# Edit .env — set MINIO_PUBLIC_ENDPOINT, credentials, DATA_ROOT
+docker compose up --build -d
 
-# Scale workers horizontally — no code changes required
-docker compose up --scale image-worker=8
+# Scale workers
+docker compose up -d --scale image-worker=4
 ```
 
-API is available at: `http://localhost:3000`
+API is available at: `http://localhost:4001`
 
-## Postman Testing
+## Endpoints
 
-### 1. Upload an image
-
-```
-POST http://localhost:3000/images/upload
-Content-Type: multipart/form-data
-Field: image (file)
-```
-
-**Response 202:**
-```json
-{
-  "id": "img_550e8400-e29b-41d4-a716-446655440000",
-  "status": "queued",
-  "originalFilename": "photo.jpg",
-  "createdAt": "2024-01-15T10:00:00.000Z",
-  "updatedAt": "2024-01-15T10:00:00.000Z",
-  "variants": null
-}
-```
-
-### 2. Poll status
-
-```
-GET http://localhost:3000/images/img_550e8400-e29b-41d4-a716-446655440000
-```
-
-**Response 200 (completed):**
-```json
-{
-  "id": "img_550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "originalFilename": "photo.jpg",
-  "createdAt": "2024-01-15T10:00:00.000Z",
-  "updatedAt": "2024-01-15T10:00:02.000Z",
-  "variants": {
-    "display": "/images/img_550e8400-e29b-41d4-a716-446655440000/display.webp",
-    "thumbnail": "/images/img_550e8400-e29b-41d4-a716-446655440000/thumbnail.webp"
-  }
-}
-```
-
-### 3. Download processed image
-
-```
-GET http://localhost:3000/images/img_550e8400-e29b-41d4-a716-446655440000/display
-GET http://localhost:3000/images/img_550e8400-e29b-41d4-a716-446655440000/thumbnail
-```
-
-Both return WebP with:
-```
-Cache-Control: public, max-age=31536000, immutable
-Content-Type: image/webp
-```
-
-### 4. Health check
-
-```
-GET http://localhost:3000/health
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
+| Method | Path | Description |
 |---|---|---|
-| `PORT` | `3000` | API HTTP port |
-| `REDIS_HOST` | `localhost` | Redis hostname |
-| `REDIS_PORT` | `6379` | Redis port |
-| `REDIS_PASSWORD` | — | Redis AUTH password |
-| `REDIS_TLS` | `false` | Enable TLS for Redis |
-| `STORAGE_DRIVER` | `local` | `local` \| `minio` \| `s3` |
-| `STORAGE_LOCAL_PATH` | `./storage` | Base directory for local storage |
-| `STORAGE_PUBLIC_BASE_URL` | `/images` | Public URL prefix |
-| `MAX_FILE_SIZE_BYTES` | `20971520` | 20 MB upload limit |
-| `ALLOWED_MIME_TYPES` | `image/jpeg,...` | Comma-separated allowed types |
-| `WORKER_CONCURRENCY` | `5` | Jobs per worker process |
-| `JOB_MAX_RETRIES` | `3` | Max retry attempts per job |
-| `JOB_BACKOFF_DELAY_MS` | `2000` | Exponential back-off base delay |
-| `LOG_LEVEL` | `info` | Pino log level |
-| `LOG_PRETTY` | `false` | Enable pretty logs (dev only) |
+| `GET` | `/health` | Liveness probe |
+| `GET` | `/metrics` | Prometheus metrics |
+| `POST` | `/images/upload` | Upload image (multipart) |
+| `GET` | `/images/:id` | Poll processing status |
+| `GET` | `/images/:id/:variant` | Serve variant directly |
+| `GET` | `/images/:seoFilename` | Serve by SEO filename |
 
 ## Image Variants
 
-| Variant | Size | Format | Quality | Notes |
-|---|---|---|---|---|
-| `display` | Max 1920px wide | WebP | 82 | Preserves aspect ratio, no upscaling |
-| `thumbnail` | 300×300 | WebP | 75 | Cover crop, entropy-based smart focus |
+| Variant | Output | Quality | Notes |
+|---|---|---|---|
+| `thumbnail` | 256×256 WebP | 75 | Cover crop, entropy-based smart focus |
+| `display` | 1280px max-width WebP | 82 | Preserves aspect ratio |
+| `large` | 1920px max-width WebP | 85 | High-res variant |
+| `print` | Full resolution PNG | 95 | Lossless, no scaling |
 
-## Storage Structure
+## Prometheus Metrics
+
+Metrics are exposed at `GET /metrics` — no local Prometheus needed.
+Point your global Prometheus at `http://YOUR_SERVER_IP:4001/metrics`.
+
+Available metrics:
+- `http_request_duration_seconds` — request latency
+- `http_requests_total` — request count
+- `image_uploads_total` — upload count (success/error)
+- `image_upload_size_bytes` — upload size distribution
+- `bullmq_queue_jobs_total` — queue depth by status
+
+## Storage (MinIO)
 
 ```
-storage/
+MinIO Bucket: images
 └── img_<uuid>/
-    ├── original.jpg     ← never served publicly
-    ├── display.webp
-    └── thumbnail.webp
+    ├── original.jpg     ← stored on upload (never served publicly)
+    ├── thumbnail.webp   ← 256×256
+    ├── display.webp     ← 1280px
+    ├── large.webp       ← 1920px
+    └── print.png        ← full res
 ```
+
+Bucket policy: `public-read` — processed variants are directly accessible via URL.
+
+## Local Development (without Docker)
+
+```bash
+cp .env.example .env
+# Change DATA_ROOT=C:/docker-data, PORT=4001
+npm install
+npm run dev:api      # terminal 1
+npm run dev:worker   # terminal 2
+```
+
+Requires a local Redis on port 6379 and MinIO running.
 
 ## Adding a New Variant (e.g. "avatar")
 
@@ -150,21 +109,6 @@ storage/
 
 No other changes required.
 
-## Adding MinIO / S3 Storage
+## Deployment
 
-1. Create `src/storage/MinIOStorage.ts` implementing `StorageProvider`
-2. Add a `case 'minio':` in `src/storage/index.ts`
-3. Set `STORAGE_DRIVER=minio` + connection env vars
-
-No business logic changes needed.
-
-## Local Development (without Docker)
-
-```bash
-cp .env.example .env
-npm install
-npm run dev:api      # terminal 1
-npm run dev:worker   # terminal 2
-```
-
-Requires a local Redis on port 6379.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for full Ubuntu production setup.

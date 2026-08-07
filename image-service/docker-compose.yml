@@ -13,7 +13,7 @@ services:
       --maxmemory-policy allkeys-lru
       ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
-      - "${REDIS_PORT}:6379"
+      - "127.0.0.1:${REDIS_PORT}:6379"
     volumes:
       - "${DATA_ROOT}/redis:/data"
     healthcheck:
@@ -48,7 +48,6 @@ services:
       start_period: 10s
     networks:
       - image-net
-      - observability-net
 
   # ─── Bucket Init (runs once, then exits) ──────────────────────────────────
   minio-init:
@@ -134,7 +133,6 @@ services:
       start_period: 15s
     networks:
       - image-net
-      - observability-net
 
   # ─── Image Worker ────────────────────────────────────────────────────────────
   image-worker:
@@ -200,6 +198,3 @@ services:
 networks:
   image-net:
     driver: bridge
-  observability-net:
-    name: observability-net
-    external: true
