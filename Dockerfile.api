@@ -1,22 +1,28 @@
-# ─── Build Stage ──────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Build Stage
+# ──────────────────────────────────────────────────────────────────────────────
 
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies first (layer-cached)
+# Install dependencies
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 
-# Copy source and compile
+# Copy source
 COPY tsconfig.json ./
 COPY src ./src
+
+# Build
 RUN npm run build
 
 # Remove dev dependencies
 RUN npm prune --omit=dev
 
-# ─── Production Stage ─────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# Production Stage
+# ──────────────────────────────────────────────────────────────────────────────
 
 FROM node:20-alpine AS production
 
@@ -30,7 +36,7 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copy compiled application
+# Copy application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
@@ -38,7 +44,7 @@ COPY --from=builder /app/package.json ./
 # Storage directory
 RUN mkdir -p /app/storage
 
-# Create non-root user
+# Non-root user
 RUN addgroup -g 1001 -S nodegroup && \
     adduser -u 1001 -S nodeuser -G nodegroup && \
     chown -R nodeuser:nodegroup /app
@@ -49,7 +55,7 @@ EXPOSE 4000
 
 # Health Check
 HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=5 \
-  CMD curl -fsS http://127.0.0.1:4000/health >/dev/null || exit 1
+  CMD ["curl","-fsS","http://127.0.0.1:4000/health"]
 
 # Start API
-CMD ["node", "dist/api/server.js"]
+CMD ["node","dist/api/server.js"]
