@@ -1,16 +1,20 @@
-# Root dependency and output directories
+# ─── Build outputs & runtime data ─────────────────────────────────────────────
 node_modules/
 dist/
-storage/
 .env
 *.log
 data/
 temp.py
 
-# Nested dependencies and outputs
+# Match any nested node_modules / dist / .env / logs
 **/node_modules/
 **/dist/
 **/.env
 **/*.log
-**/storage/
 **/data/
+
+# Ignore runtime storage directories (MinIO data, local file uploads, etc.)
+# but NOT the src/storage/ source code module.
+storage/
+**/storage/
+!**/src/storage/

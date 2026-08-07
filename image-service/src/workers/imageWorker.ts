@@ -69,7 +69,7 @@ worker.on('completed', (job) => {
   );
 });
 
-worker.on('failed', (job, err) => {
+worker.on('failed', (job, err: Error) => {
   logger.error(
     { jobId: job?.id, imageId: job?.data?.imageId, variant: job?.data?.variant, err },
     'Job failed ✗',
