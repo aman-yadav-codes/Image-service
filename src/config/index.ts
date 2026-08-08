@@ -34,6 +34,15 @@ export const config = {
     ).split(','),
     rateLimitWindowMs: optionalNumber('RATE_LIMIT_WINDOW_MS', 60_000),
     rateLimitMax:      optionalNumber('RATE_LIMIT_MAX', 200),
+    /**
+     * Comma-separated list of allowed CORS origins.
+     * e.g. CORS_ORIGINS=https://new.findmy.co.za,http://localhost:3000
+     * Defaults to the production domain + common local dev ports.
+     */
+    corsOrigins: optional(
+      'CORS_ORIGINS',
+      'https://new.findmy.co.za,http://localhost:3000,http://localhost:5173,http://localhost:4000,http://127.0.0.1:3000',
+    ).split(',').map((o) => o.trim()).filter(Boolean),
   },
 
   redis: {

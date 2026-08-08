@@ -1,4 +1,5 @@
 import express from 'express';
+import cors from 'cors';
 import helmet from 'helmet';
 import pinoHttp from 'pino-http';
 import rateLimit from 'express-rate-limit';
@@ -13,6 +14,11 @@ import { metricsMiddleware } from '../utils/metrics.js';
 
 export function createApp() {
   const app = express();
+
+  // ── CORS ─────────────────────────────────────────────────────────────────────
+  // Allow all origins for now — tighten to specific domains before going live.
+  app.use(cors({ origin: '*', methods: ['GET', 'POST', 'OPTIONS'], allowedHeaders: ['Content-Type', 'Authorization'] }));
+  app.options('*', cors()); // handle preflight for all routes
 
   // ── Metrics ─────────────────────────────────────────────────────────────────
   app.use(metricsMiddleware);
