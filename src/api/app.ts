@@ -24,7 +24,11 @@ export function createApp() {
   app.use(metricsMiddleware);
 
   // ── Security ────────────────────────────────────────────────────────────────
-  app.use(helmet());
+  // crossOriginResourcePolicy: 'cross-origin' — lets browsers load images/assets
+  // served from this API into pages on other origins (e.g. https://new.findmy.co.za).
+  // Without this, helmet's default 'same-origin' policy causes
+  // net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin even when CORS headers are correct.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.disable('x-powered-by');
 
   // ── Request Logging ─────────────────────────────────────────────────────────
