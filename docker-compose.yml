@@ -1,31 +1,22 @@
 services:
-
-  # ─── Redis ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7.2-alpine
     container_name: image-service-redis
     restart: unless-stopped
     command: >
-      redis-server
-      --save 60 1
-      --loglevel warning
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
+      redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
       ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
       - "127.0.0.1:${REDIS_PORT}:6379"
-    volumes:
-      - "${DATA_ROOT}/redis:/data"
+    volumes: ["${DATA_ROOT}/redis:/data"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
-    networks:
-      - image-net
+    networks: [image-net]
 
-  # ─── MinIO Object Store ────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
     container_name: image-service-minio
@@ -38,60 +29,43 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
       MINIO_PROMETHEUS_AUTH_TYPE: "public"
-    volumes:
-      - "${DATA_ROOT}/minio:/data"
+    volumes: ["${DATA_ROOT}/minio:/data"]
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks:
-      - image-net
+    networks: [image-net]
 
-  # ─── Bucket Init (runs once, then exits) ──────────────────────────────────
   minio-init:
     image: minio/mc:latest
     container_name: image-service-minio-init
     depends_on:
-      minio:
-        condition: service_healthy
+      minio: { condition: service_healthy }
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
     entrypoint: >
-      /bin/sh -c "
-        mc alias set local http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY &&
-        mc mb --ignore-existing local/$$MINIO_BUCKET &&
-        mc anonymous set public local/$$MINIO_BUCKET &&
-        echo 'Bucket ready:' $$MINIO_BUCKET '(public-read)' &&
-        exit 0
-      "
-    networks:
-      - image-net
+      /bin/sh -c "mc alias set local http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY && mc mb --ignore-existing local/$$MINIO_BUCKET && mc anonymous set public local/$$MINIO_BUCKET && exit 0"
+    networks: [image-net]
 
-  # ─── Image API ──────────────────────────────────────────────────────────────
   image-api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
+    build: { context: ., dockerfile: Dockerfile.api }
     container_name: image-service-api
     restart: unless-stopped
-    ports:
-      - "${PORT}:4000"
+    ports: ["${PORT}:4000"]
     environment:
       NODE_ENV: ${NODE_ENV}
       LOG_LEVEL: ${LOG_LEVEL}
       LOG_PRETTY: ${LOG_PRETTY}
       PORT: 4000
       HOST: "0.0.0.0"
-      # Redis
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_DB: ${REDIS_DB}
-      # Storage
       STORAGE_DRIVER: ${STORAGE_DRIVER}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
@@ -101,16 +75,15 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_REGION: ${MINIO_REGION}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      # Upload limits & Rate limits
       MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES}
       ALLOWED_MIME_TYPES: ${ALLOWED_MIME_TYPES}
+      MEDIA_MAX_FILE_SIZE_BYTES: ${MEDIA_MAX_FILE_SIZE_BYTES:-524288000}
+      MEDIA_ALLOWED_MIME_TYPES: ${MEDIA_ALLOWED_MIME_TYPES:-video/mp4,video/webm,video/quicktime,video/x-matroska,video/mpeg,application/pdf}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
-      # Safety limits & Queue Configuration
       MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS}
       MAX_METADATA_SIZE: ${MAX_METADATA_SIZE}
       QUEUE_NAME: ${QUEUE_NAME}
-      # Image presets
       THUMBNAIL_WIDTH: ${THUMBNAIL_WIDTH}
       THUMBNAIL_HEIGHT: ${THUMBNAIL_HEIGHT}
       THUMBNAIL_QUALITY: ${THUMBNAIL_QUALITY}
@@ -121,35 +94,27 @@ services:
       PRINT_QUALITY: ${PRINT_QUALITY}
       PRINT_FORMAT: ${PRINT_FORMAT}
     depends_on:
-      redis:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 15s
-    networks:
-      - image-net
+    networks: [image-net]
 
-  # ─── Image Worker ────────────────────────────────────────────────────────────
   image-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
+    build: { context: ., dockerfile: Dockerfile.worker }
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV}
       LOG_LEVEL: ${LOG_LEVEL}
       LOG_PRETTY: ${LOG_PRETTY}
-      # Redis
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_DB: ${REDIS_DB}
-      # Storage — MinIO
       STORAGE_DRIVER: ${STORAGE_DRIVER}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
@@ -159,17 +124,14 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_REGION: ${MINIO_REGION}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      # Worker tuning
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
       JOB_MAX_RETRIES: ${JOB_MAX_RETRIES}
       JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS}
       JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS}
       JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS}
-      # Safety limits & Queue Configuration
       MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS}
       MAX_METADATA_SIZE: ${MAX_METADATA_SIZE}
       QUEUE_NAME: ${QUEUE_NAME}
-      # Image presets
       THUMBNAIL_WIDTH: ${THUMBNAIL_WIDTH}
       THUMBNAIL_HEIGHT: ${THUMBNAIL_HEIGHT}
       THUMBNAIL_QUALITY: ${THUMBNAIL_QUALITY}
@@ -180,21 +142,51 @@ services:
       PRINT_QUALITY: ${PRINT_QUALITY}
       PRINT_FORMAT: ${PRINT_FORMAT}
     depends_on:
-      redis:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
-    networks:
-      - image-net
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    networks: [image-net]
     deploy:
       resources:
         limits:
           cpus: "${WORKER_CPU_LIMIT}"
           memory: "${WORKER_MEMORY_LIMIT}"
 
+  media-worker:
+    build: { context: ., dockerfile: Dockerfile.media-worker }
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      LOG_LEVEL: ${LOG_LEVEL}
+      LOG_PRETTY: ${LOG_PRETTY}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: ${REDIS_DB}
+      STORAGE_DRIVER: ${STORAGE_DRIVER}
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_REGION: ${MINIO_REGION}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MEDIA_WORKER_CONCURRENCY: ${MEDIA_WORKER_CONCURRENCY:-2}
+      VIDEO_PRESET: ${VIDEO_PRESET:-veryfast}
+      JOB_MAX_RETRIES: ${JOB_MAX_RETRIES}
+      JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS}
+      JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS}
+      JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS}
+    depends_on:
+      redis: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    networks: [image-net]
+    deploy:
+      resources:
+        limits:
+          cpus: "${MEDIA_WORKER_CPU_LIMIT:-2}"
+          memory: "${MEDIA_WORKER_MEMORY_LIMIT:-2G}"
 
-
-# ─── Networks ─────────────────────────────────────────────────────────────────
 networks:
   image-net:
     driver: bridge

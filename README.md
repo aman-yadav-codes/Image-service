@@ -1,114 +1,75 @@
-﻿# Image Processing Microservice
+# Media Processing Microservice
 
-A production-ready, horizontally scalable image processing API built with Node.js, TypeScript, Sharp, BullMQ, Redis, and MinIO.
+Production-ready, horizontally scalable image, video, and PDF processing API built with Node.js, TypeScript, Sharp, FFmpeg, qpdf, Ghostscript, BullMQ, Redis, and MinIO.
 
 ## Architecture
 
-```
-POST /images/upload
-       │
-       ▼
- [image-api :4001]
-  ├── Validate (MIME, size)
-  ├── Upload original → MinIO
-  ├── Enqueue BullMQ jobs (4 variants)
-  └── Return 202 { id, status: "queued" }
-
-       │
-       ▼
-[Redis / BullMQ Queue]
-       │
-       ▼
-[image-worker × N]
-  ├── Load original from MinIO
-  ├── Apply Sharp preset (thumbnail / display / large / print)
-  └── Save processed variants → MinIO
-
-       │
-       ▼
-GET /images/:id  →  { status, variants: { thumbnail, display, large, print } }
+```text
+POST /images/upload                    POST /media/upload
+        │                                      │
+        ▼                                      ▼
+   Image Queue                            Media Queue
+        │                                      │
+   Sharp Workers                    ┌──────────┴──────────┐
+        │                           │                     │
+        │                       FFmpeg Worker         PDF Worker
+        │                           │                     │
+        └───────────────┬───────────┴─────────────────────┘
+                        ▼
+                      MinIO
 ```
 
-## Quick Start (Docker)
+The original image pipeline remains unchanged. Media processing uses a separate BullMQ queue and dedicated workers so CPU-heavy video/PDF jobs cannot starve image processing.
 
-```bash
-cd Image-service
-cp .env.example .env
-# Edit .env — set MINIO_PUBLIC_ENDPOINT, credentials, DATA_ROOT
-docker compose up --build -d
-
-# Scale workers
-docker compose up -d --scale image-worker=4
-```
-
-API is available at: `http://localhost:4001`
-
-## Endpoints
+## Media Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Liveness probe |
-| `GET` | `/metrics` | Prometheus metrics |
-| `POST` | `/images/upload` | Upload image (multipart) |
-| `GET` | `/images/:id` | Poll processing status |
-| `GET` | `/images/:id/:variant` | Serve variant directly |
-| `GET` | `/images/:seoFilename` | Serve by SEO filename |
+| `POST` | `/media/upload` | Upload a video or PDF (`file` multipart field) |
+| `GET` | `/media/:id` | Poll processing status |
+| `GET` | `/media/:id/:variant` | Stream a processed variant |
 
-## Image Variants
+### Video variants
 
-| Variant | Output | Quality | Notes |
-|---|---|---|---|
-| `thumbnail` | 256×256 WebP | 75 | Cover crop, entropy-based smart focus |
-| `display` | 1280px max-width WebP | 82 | Preserves aspect ratio |
-| `large` | 1920px max-width WebP | 85 | High-res variant |
-| `print` | Full resolution PNG | 95 | Lossless, no scaling |
+- `720p` — H.264/AAC MP4, CRF 23
+- `480p` — H.264/AAC MP4, CRF 25
+- `poster` — JPEG preview frame
 
-## Prometheus Metrics
+FFmpeg is used for transcoding and `+faststart` is enabled for browser-friendly MP4 playback.
 
-Metrics are exposed at `GET /metrics` — no local Prometheus needed.
-Point your global Prometheus at `http://YOUR_SERVER_IP:4001/metrics`.
+### PDF variants
 
-Available metrics:
-- `http_request_duration_seconds` — request latency
-- `http_requests_total` — request count
-- `image_uploads_total` — upload count (success/error)
-- `image_upload_size_bytes` — upload size distribution
-- `bullmq_queue_jobs_total` — queue depth by status
+- `lossless` — qpdf structural/object-stream optimization. No intentional image-quality reduction.
+- `balanced` — Ghostscript `/ebook` optimization. Smaller output with image recompression/downsampling where applicable.
 
-## Storage (MinIO)
+Lossless PDF compression cannot guarantee a smaller file for every PDF, especially when images are already compressed.
 
-```
-MinIO Bucket: images
-└── img_<uuid>/
-    ├── original.jpg     ← stored on upload (never served publicly)
-    ├── thumbnail.webp   ← 256×256
-    ├── display.webp     ← 1280px
-    ├── large.webp       ← 1920px
-    └── print.png        ← full res
+## Scaling
+
+Run image and media workers independently:
+
+```bash
+docker compose up -d --build
+docker compose up -d --scale image-worker=4 --scale media-worker=2
 ```
 
-Bucket policy: `public-read` — processed variants are directly accessible via URL.
+Media worker concurrency is controlled by `MEDIA_WORKER_CONCURRENCY` (default `2`). Video encoding is CPU-intensive, so scale media workers according to available CPU and memory.
 
-## Local Development (without Docker)
+## Storage
+
+MinIO stores originals privately by object key and processed variants alongside them. Processed variants are served through the API and can also be exposed through the configured object-store/CDN layer.
+
+## Local Development
 
 ```bash
 cp .env.example .env
-# Change DATA_ROOT=C:/docker-data, PORT=4001
 npm install
-npm run dev:api      # terminal 1
-npm run dev:worker   # terminal 2
+npm run dev:api
+npm run dev:worker
 ```
 
-Requires a local Redis on port 6379 and MinIO running.
+For media processing, the worker host must have `ffmpeg`, `qpdf`, and `gs` (Ghostscript) installed. Docker is recommended because the media worker image includes these tools.
 
-## Adding a New Variant (e.g. "avatar")
+## Safety limits
 
-1. Create `src/presets/avatar.ts` implementing `SharpPreset`
-2. Register it in `src/presets/index.ts`
-3. Add `'avatar'` to `ImageVariant` in `src/types/index.ts`
-
-No other changes required.
-
-## Deployment
-
-See [DEPLOYMENT.md](./DEPLOYMENT.md) for full Ubuntu production setup.
+`MEDIA_MAX_FILE_SIZE_BYTES` defaults to 500 MB. Accepted media MIME types are configurable with `MEDIA_ALLOWED_MIME_TYPES`.
