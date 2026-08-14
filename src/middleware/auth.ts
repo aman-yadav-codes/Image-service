@@ -66,7 +66,7 @@ interface BetterAuthSession {
 
 async function validateSessionToken(token: string): Promise<string | null> {
   if (!AUTH_SERVER_URL) {
-    logger.warn('AUTH_SERVER_URL is not set — authentication is disabled. Set it to enable auth.');
+    logger.warn('AUTH_SERVER_URL is not set — authentication is disabled.');
     return 'anonymous'; // fallback in dev if not configured
   }
 
@@ -79,25 +79,48 @@ async function validateSessionToken(token: string): Promise<string | null> {
     const res = await fetch(url, {
       method: 'GET',
       headers: {
-        // Forward token both ways Better Auth accepts it
+        // Better Auth accepts token both as cookie and Bearer header
         'Cookie': `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
-      signal: AbortSignal.timeout(5_000), // 5s timeout
+      signal: AbortSignal.timeout(5_000),
     });
 
-    if (!res.ok) return null;
+    const rawText = await res.text();
+    logger.debug({ status: res.status, body: rawText.slice(0, 300) }, 'Auth server response');
 
-    const data = await res.json() as BetterAuthSession;
+    if (!res.ok) {
+      logger.warn({ status: res.status, url }, 'Auth server returned non-OK status');
+      return null;
+    }
+
+    // Handle empty body
+    if (!rawText || rawText.trim() === '' || rawText.trim() === 'null') {
+      logger.warn({ url }, 'Auth server returned empty/null body — token invalid or session endpoint mismatch');
+      return null;
+    }
+
+    let data: BetterAuthSession;
+    try {
+      data = JSON.parse(rawText) as BetterAuthSession;
+    } catch {
+      logger.error({ url, rawText: rawText.slice(0, 200) }, 'Auth server returned non-JSON response');
+      return null;
+    }
+
     const userId = data?.user?.id ?? data?.session?.id;
-    if (!userId) return null;
+    if (!userId) {
+      logger.debug({ data }, 'Auth server response has no user/session id — token invalid');
+      return null;
+    }
 
     setCached(token, userId);
     return userId;
   } catch (err) {
     logger.error({ err, url: AUTH_SERVER_URL }, 'Auth server request failed');
     return null;
+
   }
 }
 
