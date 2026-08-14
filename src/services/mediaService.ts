@@ -142,14 +142,34 @@ export async function markMediaVariantCompleted(
 
 // ─── Mark failed ──────────────────────────────────────────────────────────────
 
-export async function markMediaFailed(id: string, error: string): Promise<void> {
+export async function markMediaFailed(id: string, rawError: string): Promise<void> {
   const raw = await redis.get(key(id));
   if (!raw) return;
   const meta = JSON.parse(raw) as MediaMetadata;
   meta.status = 'failed';
-  meta.error = error;
+  // Extract the first meaningful error line — don't dump full ffmpeg/gs output
+  meta.error = extractError(rawError);
   meta.updatedAt = nowIso();
   await redis.set(key(id), JSON.stringify(meta), 'EX', MEDIA_TTL);
+}
+
+/** Pull the first recognisable error line out of a long command output string. */
+function extractError(msg: string): string {
+  const lines = msg.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  // Look for the first line that contains a real error keyword
+  const errorLine = lines.find((l) =>
+    /error|invalid|failed|could not|no such|permission denied/i.test(l) &&
+    !l.startsWith('ffmpeg version') &&
+    !l.startsWith('built with') &&
+    !l.startsWith('configuration:') &&
+    !l.startsWith('lib'),
+  );
+
+  if (errorLine) return errorLine.slice(0, 300);
+
+  // Fallback: first line of the message, capped at 300 chars
+  return (lines[0] ?? msg).slice(0, 300);
 }
 
 // ─── Response builder ─────────────────────────────────────────────────────────
