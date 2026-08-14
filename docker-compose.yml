@@ -82,7 +82,8 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-200}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       # Auth — Better Auth session validation
-      AUTH_SERVER_URL: ${AUTH_SERVER_URL}
+      # Uses findmy-server container name (reachable via findmy_default network)
+      AUTH_SERVER_URL: ${AUTH_SERVER_URL:-http://findmy-server:4000}
       AUTH_SESSION_ENDPOINT: ${AUTH_SESSION_ENDPOINT:-/api/auth/get-session}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-better-auth.session_token}
       JOB_MAX_RETRIES: ${JOB_MAX_RETRIES:-3}
@@ -154,16 +155,13 @@ services:
           memory: "${MEDIA_WORKER_MEMORY_LIMIT:-2G}"
 
 networks:
-  # Internal network for redis, minio, api, worker
+  # Internal: redis, minio, api, worker
   media-net:
     driver: bridge
 
-  # External network shared with the FindMy app stack.
-  # Allows media-api to call findmy-server:4000 for Better Auth session validation.
-  # On the server, this network is created by the findmy docker-compose stack.
-  # Find the real name with: docker network ls | grep findmy
-  # Then set FINDMY_NETWORK=<exact-name> in your .env (default: findmy_default)
+  # External: FindMy app stack network.
+  # media-api joins this so it can reach findmy-server:4000 for session validation.
+  # Created automatically by the findmy docker-compose stack as "findmy_default".
   findmy-net:
     external: true
-    name: ${FINDMY_NETWORK:-findmy_default}
-
+    name: findmy_default
