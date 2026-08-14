@@ -35,6 +35,14 @@ export interface MediaMetadata {
   updatedAt: string;
   completedVariants: MediaVariant[];
   variants: Record<string, string>;
+  /**
+   * Optional SEO-friendly slug supplied at upload time via the `name` form field.
+   * When set, variant URLs become: /media/:id/:variant/{slug}.{ext}
+   *   e.g. /media/media_123/display/product-photo.webp
+   * When not set, variant URLs are: /media/:id/:variant.{ext}
+   *   e.g. /media/media_123/display.webp
+   */
+  slug?: string;
   error?: string;
 }
 

@@ -49,6 +49,18 @@ export interface MediaUploadInput {
   originalname: string;
   mimetype: string;
   size: number;
+  /** Optional SEO-friendly name. Slugified and used in variant URLs. */
+  name?: string;
+}
+
+/** Convert any string to a URL-safe slug: "My Product!" → "my-product" */
+function slugify(raw: string): string {
+  return raw
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80); // cap length
 }
 
 export async function uploadMedia(input: MediaUploadInput): Promise<MediaResponse> {
@@ -57,6 +69,7 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
   const id = `media_${randomUUID()}`;
   const ext = path.extname(input.originalname) || inferExt(kind, input.mimetype);
   const originalFilename = `original${ext}`;
+  const slug = input.name ? slugify(input.name) : undefined;
   const now = nowIso();
 
   const metadata: MediaMetadata = {
@@ -70,6 +83,7 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
     updatedAt: now,
     completedVariants: [],
     variants: {},
+    ...(slug ? { slug } : {}),
   };
 
   // For excel: mark as completed immediately (no processing needed)
@@ -141,12 +155,23 @@ export async function markMediaFailed(id: string, error: string): Promise<void> 
 // ─── Response builder ─────────────────────────────────────────────────────────
 
 function toResponse(meta: MediaMetadata): MediaResponse {
-  // Build proper public URLs for each completed variant
   const variantUrls = Object.fromEntries(
-    Object.entries(meta.variants).map(([name, filename]) => [
-      name,
-      `/media/${meta.id}/${name}`,
-    ]),
+    Object.entries(meta.variants).map(([variantName, filename]) => {
+      const ext = path.extname(filename); // e.g. ".pdf", ".mp4", ".webp", ".xlsx"
+
+      if (meta.slug && ext) {
+        // SEO URL: /media/:id/:variant/{slug}.{ext}
+        // e.g. /media/media_123/display/product-photo.webp
+        //      /media/media_123/compressed/my-contract.pdf
+        //      /media/media_123/hd/promo-video.mp4
+        //      /media/media_123/original/sales-data.xlsx
+        return [variantName, `/media/${meta.id}/${variantName}/${meta.slug}${ext}`];
+      }
+
+      // Default URL: /media/:id/:variant.{ext}
+      // e.g. /media/media_123/display.webp
+      return [variantName, `/media/${meta.id}/${variantName}${ext}`];
+    }),
   );
 
   return { ...meta, variants: variantUrls };

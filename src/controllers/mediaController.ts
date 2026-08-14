@@ -34,6 +34,8 @@ export async function handleMediaUpload(req: Request, res: Response, next: NextF
       originalname: req.file.originalname,
       mimetype:     req.file.mimetype,
       size:         req.file.size,
+      // Optional SEO name from multipart form field `name`
+      name:         typeof req.body?.name === 'string' ? req.body.name : undefined,
     });
 
     res.status(202).json(result);
@@ -57,7 +59,9 @@ export async function handleMediaStatus(req: Request, res: Response, next: NextF
 
 export async function handleMediaVariant(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const { id, variant } = req.params as { id: string; variant: string };
+    const { id } = req.params as { id: string };
+    // Strip extension from variant name so both /compressed and /compressed.pdf work
+    const variant = (req.params.variant ?? '').replace(/\.[^.]+$/, '');
 
     const meta = await getMediaStatus(id);
 

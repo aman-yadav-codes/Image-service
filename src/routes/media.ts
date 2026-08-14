@@ -59,6 +59,7 @@ mediaRouter.get('/media/:id', handleMediaStatus);
 
 /**
  * @route   GET /media/:id/:variant
+ * @route   GET /media/:id/:variant/:seoname
  * @desc    Stream a processed variant by media ID and variant name.
  *
  * Image variants:  thumbnail | display | large | print
@@ -66,10 +67,13 @@ mediaRouter.get('/media/:id', handleMediaStatus);
  * PDF variants:    compressed
  * Excel variants:  original
  *
- * @example
- *   GET /media/media_abc.../thumbnail    → WebP thumbnail image
- *   GET /media/media_abc.../hd           → HD MP4 video
- *   GET /media/media_abc.../compressed   → Compressed PDF
- *   GET /media/media_abc.../original     → Original Excel file
+ * Without name field at upload:   /media/:id/display.webp
+ * With name="Product Photo":      /media/:id/display/product-photo.webp
+ *                                 /media/:id/hd/product-photo.mp4
+ *                                 /media/:id/compressed/product-photo.pdf
+ *                                 /media/:id/original/product-photo.xlsx
+ *
+ * The :seoname segment is ignored for file lookup — only :variant is used.
  */
 mediaRouter.get('/media/:id/:variant', handleMediaVariant);
+mediaRouter.get('/media/:id/:variant/:seoname', handleMediaVariant);
