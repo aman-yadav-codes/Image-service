@@ -30,6 +30,24 @@ export const config = {
     large: { width: optionalNumber('LARGE_WIDTH', 1920), quality: optionalNumber('LARGE_QUALITY', 85) },
     print: { quality: optionalNumber('PRINT_QUALITY', 95), format: optional('PRINT_FORMAT', 'jpeg') as 'jpeg' | 'png' },
   },
+  auth: {
+    /**
+     * Base URL of your main application server that runs Better Auth.
+     * e.g. "http://your-main-app:4000" or "http://localhost:4000"
+     * Leave empty to disable auth (dev only).
+     */
+    serverUrl: optional('AUTH_SERVER_URL', ''),
+    /**
+     * Better Auth session validation endpoint (relative path).
+     * Default: /api/auth/get-session
+     */
+    sessionEndpoint: optional('AUTH_SESSION_ENDPOINT', '/api/auth/get-session'),
+    /**
+     * Name of the session cookie set by Better Auth.
+     * Default: better-auth.session_token
+     */
+    cookieName: optional('SESSION_COOKIE_NAME', 'better-auth.session_token'),
+  },
   log: { level: optional('LOG_LEVEL', 'info'), pretty: optional('LOG_PRETTY', 'false') === 'true' || optional('NODE_ENV', 'development') === 'development' },
 } as const;
 

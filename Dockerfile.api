@@ -6,18 +6,12 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 
-# Copy source
 COPY tsconfig.json ./
 COPY src ./src
-
-# Build TypeScript
 RUN npm run build
-
-# Remove dev dependencies
 RUN npm prune --omit=dev
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -26,36 +20,28 @@ RUN npm prune --omit=dev
 
 FROM node:20-alpine AS production
 
-# Runtime dependencies
-RUN apk add --no-cache \
-    curl \
-    vips-dev \
-    fftw-dev \
-    build-base \
-    python3
+# Only runtime deps needed by the API (no Sharp/FFmpeg — processing happens in media-worker)
+RUN apk add --no-cache curl
 
 WORKDIR /app
 
-# Copy application
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 
-# Create storage directory
+# Create storage directory for local-driver fallback
 RUN mkdir -p /app/storage
 
-# Create non-root user
+# Non-root user
 RUN addgroup -g 1001 -S nodegroup && \
-    adduser -u 1001 -S nodeuser -G nodegroup && \
+    adduser  -u 1001 -S nodeuser -G nodegroup && \
     chown -R nodeuser:nodegroup /app
 
 USER nodeuser
 
 EXPOSE 4000
 
-# Health Check
-HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=5 \
-  CMD ["curl", "-fsS", "http://127.0.0.1:4000/health"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
+  CMD curl -fsS http://127.0.0.1:4000/health || exit 1
 
-# Start API
 CMD ["node", "dist/api/server.js"]

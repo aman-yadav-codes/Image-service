@@ -1,186 +1,149 @@
 services:
   redis:
     image: redis:7.2-alpine
-    container_name: image-service-redis
+    container_name: media-service-redis
     restart: unless-stopped
     command: >
       redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
       ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
-      - "127.0.0.1:${REDIS_PORT}:6379"
-    volumes: ["${DATA_ROOT}/redis:/data"]
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes: ["${DATA_ROOT:-/srv/media-service}/redis:/data"]
     healthcheck:
       test: ["CMD-SHELL", "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
-    networks: [image-net]
+    networks: [media-net]
 
   minio:
     image: minio/minio:latest
-    container_name: image-service-minio
+    container_name: media-service-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
       MINIO_PROMETHEUS_AUTH_TYPE: "public"
-    volumes: ["${DATA_ROOT}/minio:/data"]
+    volumes: ["${DATA_ROOT:-/srv/media-service}/minio:/data"]
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks: [image-net]
+    networks: [media-net]
 
   minio-init:
     image: minio/mc:latest
-    container_name: image-service-minio-init
+    container_name: media-service-minio-init
     depends_on:
       minio: { condition: service_healthy }
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_BUCKET: ${MINIO_BUCKET:-media}
     entrypoint: >
-      /bin/sh -c "mc alias set local http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY && mc mb --ignore-existing local/$$MINIO_BUCKET && mc anonymous set public local/$$MINIO_BUCKET && exit 0"
-    networks: [image-net]
+      /bin/sh -c "mc alias set local http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY &&
+      mc mb --ignore-existing local/$$MINIO_BUCKET &&
+      mc anonymous set public local/$$MINIO_BUCKET &&
+      exit 0"
+    networks: [media-net]
 
-  image-api:
+  # ── API (Express) ─────────────────────────────────────────────────────────────
+  media-api:
     build: { context: ., dockerfile: Dockerfile.api }
-    container_name: image-service-api
+    container_name: media-service-api
     restart: unless-stopped
-    ports: ["${PORT}:4000"]
+    ports: ["${PORT:-4000}:4000"]
     environment:
-      NODE_ENV: ${NODE_ENV}
-      LOG_LEVEL: ${LOG_LEVEL}
-      LOG_PRETTY: ${LOG_PRETTY}
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-false}
       PORT: 4000
       HOST: "0.0.0.0"
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      REDIS_DB: ${REDIS_DB}
-      STORAGE_DRIVER: ${STORAGE_DRIVER}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-minio}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
-      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
-      MINIO_REGION: ${MINIO_REGION}
+      MINIO_BUCKET: ${MINIO_BUCKET:-media}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES}
-      ALLOWED_MIME_TYPES: ${ALLOWED_MIME_TYPES}
-      MEDIA_MAX_FILE_SIZE_BYTES: ${MEDIA_MAX_FILE_SIZE_BYTES:-524288000}
-      MEDIA_ALLOWED_MIME_TYPES: ${MEDIA_ALLOWED_MIME_TYPES:-video/mp4,video/webm,video/quicktime,video/x-matroska,video/mpeg,application/pdf}
-      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX}
-      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
-      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS}
-      MAX_METADATA_SIZE: ${MAX_METADATA_SIZE}
-      QUEUE_NAME: ${QUEUE_NAME}
-      THUMBNAIL_WIDTH: ${THUMBNAIL_WIDTH}
-      THUMBNAIL_HEIGHT: ${THUMBNAIL_HEIGHT}
-      THUMBNAIL_QUALITY: ${THUMBNAIL_QUALITY}
-      DISPLAY_WIDTH: ${DISPLAY_WIDTH}
-      DISPLAY_QUALITY: ${DISPLAY_QUALITY}
-      LARGE_WIDTH: ${LARGE_WIDTH}
-      LARGE_QUALITY: ${LARGE_QUALITY}
-      PRINT_QUALITY: ${PRINT_QUALITY}
-      PRINT_FORMAT: ${PRINT_FORMAT}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-200}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      # Auth — Better Auth session validation
+      AUTH_SERVER_URL: ${AUTH_SERVER_URL}
+      AUTH_SESSION_ENDPOINT: ${AUTH_SESSION_ENDPOINT:-/api/auth/get-session}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-better-auth.session_token}
+      JOB_MAX_RETRIES: ${JOB_MAX_RETRIES:-3}
+      JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS:-2000}
+      JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS:-3600000}
+      JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS:-86400000}
     depends_on:
       redis: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health"]
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 15s
-    networks: [image-net]
+      start_period: 20s
+    networks: [media-net]
 
-  image-worker:
-    build: { context: ., dockerfile: Dockerfile.worker }
-    restart: unless-stopped
-    environment:
-      NODE_ENV: ${NODE_ENV}
-      LOG_LEVEL: ${LOG_LEVEL}
-      LOG_PRETTY: ${LOG_PRETTY}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      REDIS_DB: ${REDIS_DB}
-      STORAGE_DRIVER: ${STORAGE_DRIVER}
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
-      MINIO_USE_SSL: ${MINIO_USE_SSL}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
-      MINIO_REGION: ${MINIO_REGION}
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY}
-      JOB_MAX_RETRIES: ${JOB_MAX_RETRIES}
-      JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS}
-      JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS}
-      JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS}
-      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS}
-      MAX_METADATA_SIZE: ${MAX_METADATA_SIZE}
-      QUEUE_NAME: ${QUEUE_NAME}
-      THUMBNAIL_WIDTH: ${THUMBNAIL_WIDTH}
-      THUMBNAIL_HEIGHT: ${THUMBNAIL_HEIGHT}
-      THUMBNAIL_QUALITY: ${THUMBNAIL_QUALITY}
-      DISPLAY_WIDTH: ${DISPLAY_WIDTH}
-      DISPLAY_QUALITY: ${DISPLAY_QUALITY}
-      LARGE_WIDTH: ${LARGE_WIDTH}
-      LARGE_QUALITY: ${LARGE_QUALITY}
-      PRINT_QUALITY: ${PRINT_QUALITY}
-      PRINT_FORMAT: ${PRINT_FORMAT}
-    depends_on:
-      redis: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
-    networks: [image-net]
-    deploy:
-      resources:
-        limits:
-          cpus: "${WORKER_CPU_LIMIT}"
-          memory: "${WORKER_MEMORY_LIMIT}"
-
+  # ── Media Worker (images + video + pdf + excel) ───────────────────────────────
   media-worker:
     build: { context: ., dockerfile: Dockerfile.media-worker }
+    container_name: media-service-worker
     restart: unless-stopped
     environment:
-      NODE_ENV: ${NODE_ENV}
-      LOG_LEVEL: ${LOG_LEVEL}
-      LOG_PRETTY: ${LOG_PRETTY}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      REDIS_DB: ${REDIS_DB}
-      STORAGE_DRIVER: ${STORAGE_DRIVER}
+      NODE_ENV: ${NODE_ENV:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-false}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-minio}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
-      MINIO_USE_SSL: ${MINIO_USE_SSL}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_BUCKET: ${MINIO_BUCKET}
-      MINIO_REGION: ${MINIO_REGION}
+      MINIO_BUCKET: ${MINIO_BUCKET:-media}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      # Worker tuning
       MEDIA_WORKER_CONCURRENCY: ${MEDIA_WORKER_CONCURRENCY:-2}
       VIDEO_PRESET: ${VIDEO_PRESET:-veryfast}
-      JOB_MAX_RETRIES: ${JOB_MAX_RETRIES}
-      JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS}
-      JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS}
-      JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS}
+      JOB_MAX_RETRIES: ${JOB_MAX_RETRIES:-3}
+      JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS:-2000}
+      JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS:-3600000}
+      JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS:-86400000}
+      # Image processing presets (used by Sharp inside the worker)
+      MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-40000000}
+      THUMBNAIL_WIDTH: ${THUMBNAIL_WIDTH:-256}
+      THUMBNAIL_HEIGHT: ${THUMBNAIL_HEIGHT:-256}
+      THUMBNAIL_QUALITY: ${THUMBNAIL_QUALITY:-75}
+      DISPLAY_WIDTH: ${DISPLAY_WIDTH:-1280}
+      DISPLAY_QUALITY: ${DISPLAY_QUALITY:-82}
+      LARGE_WIDTH: ${LARGE_WIDTH:-1920}
+      LARGE_QUALITY: ${LARGE_QUALITY:-85}
+      PRINT_QUALITY: ${PRINT_QUALITY:-95}
+      PRINT_FORMAT: ${PRINT_FORMAT:-jpeg}
     depends_on:
       redis: { condition: service_healthy }
       minio-init: { condition: service_completed_successfully }
-    networks: [image-net]
+    networks: [media-net]
     deploy:
       resources:
         limits:
@@ -188,5 +151,21 @@ services:
           memory: "${MEDIA_WORKER_MEMORY_LIMIT:-2G}"
 
 networks:
-  image-net:
+  # Internal network for redis, minio, api, worker
+  media-net:
     driver: bridge
+
+  # ── Cross-stack networking ────────────────────────────────────────────────────
+  # If your main app (Better Auth server) runs in a SEPARATE docker-compose stack,
+  # connect both stacks via a shared external network.
+  #
+  # On your server, run once:
+  #   docker network create app-shared-net
+  #
+  # Then set EXTERNAL_NETWORK=app-shared-net in your .env,
+  # and add that network to both the media-api container (above)
+  # and your main app container.
+  #
+  # Alternatively, set AUTH_SERVER_URL to the host machine IP:
+  #   AUTH_SERVER_URL=http://172.17.0.1:4000   (Linux Docker host IP)
+  #   AUTH_SERVER_URL=http://host.docker.internal:4000  (Docker Desktop)

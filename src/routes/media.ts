@@ -1,14 +1,75 @@
 import { Router } from 'express';
 import { mediaUpload } from '../middleware/mediaUpload.js';
-import { handleMediaUpload, handleMediaStatus, handleMediaVariant } from '../controllers/mediaController.js';
+import { requireAuth } from '../middleware/auth.js';
+import {
+  handleMediaUpload,
+  handleMediaStatus,
+  handleMediaVariant,
+  handleHealth,
+} from '../controllers/mediaController.js';
+import { handleMetrics } from '../utils/metrics.js';
 
 export const mediaRouter = Router();
 
-/** POST /media/upload — video or PDF upload */
-mediaRouter.post('/media/upload', mediaUpload.single('file'), handleMediaUpload);
+// ─── Health & Metrics ─────────────────────────────────────────────────────────
 
-/** GET /media/:id — processing status */
+/**
+ * @route   GET /health
+ * @desc    Liveness probe
+ */
+mediaRouter.get('/health', handleHealth);
+
+/**
+ * @route   GET /metrics
+ * @desc    Prometheus metrics
+ */
+mediaRouter.get('/metrics', handleMetrics);
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+
+/**
+ * @route   POST /media/upload
+ * @desc    Upload any file — image, video, PDF, or Excel.
+ *          Auto-detects the file type by MIME and routes to the appropriate pipeline:
+ *            - Image  → optimised into 4 variants (thumbnail, display, large, print) via Sharp
+ *            - Video  → transcoded into 3 variants (hd/720p, medium/480p, low/360p) via FFmpeg
+ *            - PDF    → compressed via Ghostscript (1 variant: compressed)
+ *            - Excel  → stored as-is (no processing), immediately available
+ *
+ * @body    multipart/form-data
+ *   @field  file  (File, required) — the file to upload
+ *
+ * @returns 202 JSON with { id, kind, status, variants, ... }
+ *          Poll GET /media/:id to check progress.
+ *          variant URLs are available at GET /media/:id/:variant once completed.
+ */
+mediaRouter.post('/media/upload', requireAuth, mediaUpload.single('file'), handleMediaUpload);
+
+// ─── Status ───────────────────────────────────────────────────────────────────
+
+/**
+ * @route   GET /media/:id
+ * @desc    Poll processing status. Returns variant URLs when status is "completed".
+ *
+ * @example   GET /media/media_550e8400-...
+ */
 mediaRouter.get('/media/:id', handleMediaStatus);
 
-/** GET /media/:id/:variant — stream a processed variant */
+// ─── Serve variant ────────────────────────────────────────────────────────────
+
+/**
+ * @route   GET /media/:id/:variant
+ * @desc    Stream a processed variant by media ID and variant name.
+ *
+ * Image variants:  thumbnail | display | large | print
+ * Video variants:  hd | medium | low
+ * PDF variants:    compressed
+ * Excel variants:  original
+ *
+ * @example
+ *   GET /media/media_abc.../thumbnail    → WebP thumbnail image
+ *   GET /media/media_abc.../hd           → HD MP4 video
+ *   GET /media/media_abc.../compressed   → Compressed PDF
+ *   GET /media/media_abc.../original     → Original Excel file
+ */
 mediaRouter.get('/media/:id/:variant', handleMediaVariant);
