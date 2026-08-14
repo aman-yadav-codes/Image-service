@@ -98,7 +98,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
-    networks: [media-net]
+    networks:
+      - media-net
+      - findmy-net   # shared with findmy-server for auth session validation
+
 
   # ── Media Worker (images + video + pdf + excel) ───────────────────────────────
   media-worker:
@@ -155,17 +158,12 @@ networks:
   media-net:
     driver: bridge
 
-  # ── Cross-stack networking ────────────────────────────────────────────────────
-  # If your main app (Better Auth server) runs in a SEPARATE docker-compose stack,
-  # connect both stacks via a shared external network.
-  #
-  # On your server, run once:
-  #   docker network create app-shared-net
-  #
-  # Then set EXTERNAL_NETWORK=app-shared-net in your .env,
-  # and add that network to both the media-api container (above)
-  # and your main app container.
-  #
-  # Alternatively, set AUTH_SERVER_URL to the host machine IP:
-  #   AUTH_SERVER_URL=http://172.17.0.1:4000   (Linux Docker host IP)
-  #   AUTH_SERVER_URL=http://host.docker.internal:4000  (Docker Desktop)
+  # External network shared with the FindMy app stack.
+  # Allows media-api to call findmy-server:4000 for Better Auth session validation.
+  # On the server, this network is created by the findmy docker-compose stack.
+  # Find the real name with: docker network ls | grep findmy
+  # Then set FINDMY_NETWORK=<exact-name> in your .env (default: findmy_default)
+  findmy-net:
+    external: true
+    name: ${FINDMY_NETWORK:-findmy_default}
+
