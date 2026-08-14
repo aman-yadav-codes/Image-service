@@ -1,36 +1,27 @@
 # ─── Build Stage ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
-
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm ci --ignore-scripts
-
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
-
 RUN npm prune --omit=dev
 
 # ─── Production Stage ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS production
 
-# Sharp native dependencies
-RUN apk add --no-cache vips-dev fftw-dev build-base python3
+# Image + media processing toolchain
+RUN apk add --no-cache vips-dev fftw-dev build-base python3 ffmpeg qpdf ghostscript
 
 WORKDIR /app
-
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
-
-RUN mkdir -p /app/storage
-
-RUN addgroup -g 1001 -S nodegroup && \
-    adduser  -u 1001 -S nodeuser -G nodegroup && \
-    chown -R nodeuser:nodegroup /app
-
+RUN mkdir -p /app/storage /tmp/media
+RUN addgroup -g 1001 -S nodegroup && adduser -u 1001 -S nodeuser -G nodegroup && chown -R nodeuser:nodegroup /app /tmp/media
 USER nodeuser
 
-# No HTTP port — workers communicate only via Redis/BullMQ
+# Worker processes both the existing Sharp image queue and media queue.
+# Run image and media workers as separate containers in production for independent scaling.
 CMD ["node", "dist/workers/imageWorker.js"]
