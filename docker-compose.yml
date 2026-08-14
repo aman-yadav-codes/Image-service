@@ -8,14 +8,20 @@ services:
       ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
     ports:
       - "127.0.0.1:${REDIS_PORT:-6379}:6379"
-    volumes: ["${DATA_ROOT:-/srv/media-service}/redis:/data"]
+    volumes:
+      - "${DATA_ROOT:-/srv/media-service}/redis:/data"
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 5s
-    networks: [media-net]
+    networks:
+      - media-net
 
   minio:
     image: minio/minio:latest
@@ -29,20 +35,23 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
       MINIO_PROMETHEUS_AUTH_TYPE: "public"
-    volumes: ["${DATA_ROOT:-/srv/media-service}/minio:/data"]
+    volumes:
+      - "${DATA_ROOT:-/srv/media-service}/minio:/data"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks: [media-net]
+    networks:
+      - media-net
 
   minio-init:
     image: minio/mc:latest
     container_name: media-service-minio-init
     depends_on:
-      minio: { condition: service_healthy }
+      minio:
+        condition: service_healthy
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -52,25 +61,43 @@ services:
       mc mb --ignore-existing local/$$MINIO_BUCKET &&
       mc anonymous set public local/$$MINIO_BUCKET &&
       exit 0"
-    networks: [media-net]
+    networks:
+      - media-net
 
-  # ── API (Express) ─────────────────────────────────────────────────────────────
+  # ──────────────────────────────────────────────────────────────────────────
+  # Media API
+  # ──────────────────────────────────────────────────────────────────────────
+
   media-api:
-    build: { context: ., dockerfile: Dockerfile.api }
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+
     container_name: media-service-api
+
     restart: unless-stopped
-    ports: ["${PORT:-4000}:4000"]
+
+    ports:
+      - "${PORT:-4000}:4000"
+
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: ${LOG_PRETTY:-false}
+
       PORT: 4000
       HOST: "0.0.0.0"
+
+      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: ${REDIS_DB:-0}
+
+      # Storage
       STORAGE_DRIVER: ${STORAGE_DRIVER:-minio}
+
+      # MinIO
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
@@ -79,45 +106,79 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-media}
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+
+      # Rate limiting
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-200}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
-      # Auth — Better Auth session validation
-      # Uses findmy-server container name (reachable via findmy_default network)
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Better Auth
+      # Media API validates the user's existing FindMy session.
+      # findmy-server is reachable through production_default.
+      # ──────────────────────────────────────────────────────────────────────
+
       AUTH_SERVER_URL: ${AUTH_SERVER_URL:-http://findmy-server:4000}
       AUTH_SESSION_ENDPOINT: ${AUTH_SESSION_ENDPOINT:-/api/auth/get-session}
-      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-better-auth.session_token}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-__Secure-better-auth.session_token}
+
+      # Jobs
       JOB_MAX_RETRIES: ${JOB_MAX_RETRIES:-3}
       JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS:-2000}
       JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS:-3600000}
       JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS:-86400000}
+
     depends_on:
-      redis: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
+      redis:
+        condition: service_healthy
+
+      minio-init:
+        condition: service_completed_successfully
+
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:4000/health"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "-fsS",
+          "http://localhost:4000/health"
+        ]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 20s
+
     networks:
       - media-net
-      - findmy-net   # shared with findmy-server for auth session validation
+      - findmy-net
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Media Worker
+  # ──────────────────────────────────────────────────────────────────────────
 
-  # ── Media Worker (images + video + pdf + excel) ───────────────────────────────
   media-worker:
-    build: { context: ., dockerfile: Dockerfile.media-worker }
+    build:
+      context: .
+      dockerfile: Dockerfile.media-worker
+
     container_name: media-service-worker
+
     restart: unless-stopped
+
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: ${LOG_PRETTY:-false}
+
+      # Redis
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: ${REDIS_DB:-0}
+
+      # Storage
       STORAGE_DRIVER: ${STORAGE_DRIVER:-minio}
+
+      # MinIO
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
@@ -126,42 +187,67 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-media}
       MINIO_REGION: ${MINIO_REGION:-us-east-1}
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
-      # Worker tuning
+
+      # Worker
       MEDIA_WORKER_CONCURRENCY: ${MEDIA_WORKER_CONCURRENCY:-2}
       VIDEO_PRESET: ${VIDEO_PRESET:-veryfast}
+
+      # Jobs
       JOB_MAX_RETRIES: ${JOB_MAX_RETRIES:-3}
       JOB_BACKOFF_DELAY_MS: ${JOB_BACKOFF_DELAY_MS:-2000}
       JOB_KEEP_COMPLETED_MS: ${JOB_KEEP_COMPLETED_MS:-3600000}
       JOB_KEEP_FAILED_MS: ${JOB_KEEP_FAILED_MS:-86400000}
-      # Image processing presets (used by Sharp inside the worker)
+
+      # Image processing
       MAX_IMAGE_PIXELS: ${MAX_IMAGE_PIXELS:-40000000}
+
       THUMBNAIL_WIDTH: ${THUMBNAIL_WIDTH:-256}
       THUMBNAIL_HEIGHT: ${THUMBNAIL_HEIGHT:-256}
       THUMBNAIL_QUALITY: ${THUMBNAIL_QUALITY:-75}
+
       DISPLAY_WIDTH: ${DISPLAY_WIDTH:-1280}
       DISPLAY_QUALITY: ${DISPLAY_QUALITY:-82}
+
       LARGE_WIDTH: ${LARGE_WIDTH:-1920}
       LARGE_QUALITY: ${LARGE_QUALITY:-85}
+
       PRINT_QUALITY: ${PRINT_QUALITY:-95}
       PRINT_FORMAT: ${PRINT_FORMAT:-jpeg}
+
     depends_on:
-      redis: { condition: service_healthy }
-      minio-init: { condition: service_completed_successfully }
-    networks: [media-net]
+      redis:
+        condition: service_healthy
+
+      minio-init:
+        condition: service_completed_successfully
+
+    networks:
+      - media-net
+
     deploy:
       resources:
         limits:
           cpus: "${MEDIA_WORKER_CPU_LIMIT:-2}"
           memory: "${MEDIA_WORKER_MEMORY_LIMIT:-2G}"
 
+# ────────────────────────────────────────────────────────────────────────────
+# Networks
+# ────────────────────────────────────────────────────────────────────────────
+
 networks:
-  # Internal: redis, minio, api, worker
+
+  # Internal media-service network
   media-net:
     driver: bridge
 
-  # External: FindMy app stack network.
-  # media-api joins this so it can reach findmy-server:4000 for session validation.
-  # Created automatically by the findmy docker-compose stack as "findmy_default".
+  # Existing FindMy application network
+  # Required for:
+  #
+  # media-service-api
+  #        ↓
+  # findmy-server:4000
+  #
+  # Do NOT create a new network here.
   findmy-net:
     external: true
-    name: findmy_default
+    name: production_default

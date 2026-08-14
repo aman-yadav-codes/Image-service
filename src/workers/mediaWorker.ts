@@ -93,7 +93,12 @@ async function processVideo(
 
   await run('ffmpeg', [
     '-y', '-i', input,
-    '-vf', `scale=-2:${vc.height}:force_original_aspect_ratio=decrease`,
+    // scale formula explanation:
+    //   oh   = output height (target, e.g. 480)
+    //   a    = input aspect ratio (width / height)
+    //   oh*a = correct output width for aspect ratio (may be fractional)
+    //   trunc(oh*a/2)*2  = floor to nearest even number (required by libx264)
+    '-vf', `scale=trunc(oh*a/2)*2:${vc.height}`,
     '-c:v', 'libx264',
     '-preset', config.media.videoPreset,
     '-crf', String(vc.crf),
