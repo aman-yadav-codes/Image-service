@@ -60,4 +60,15 @@ export class LocalStorage implements StorageProvider {
     const filePath = this.objectPath(imageId, filename);
     return fs.createReadStream(filePath);
   }
+
+  async deleteFolder(imageId: string): Promise<void> {
+    const dir = path.join(this.basePath, imageId);
+    try {
+      await fs.promises.rm(dir, { recursive: true, force: true });
+      logger.debug({ imageId, dir }, 'LocalStorage: folder deleted');
+    } catch (err: unknown) {
+      // ENOENT is fine — nothing to delete
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+  }
 }

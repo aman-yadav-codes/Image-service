@@ -115,6 +115,19 @@ export async function getMediaStatus(id: string): Promise<MediaResponse> {
   return toResponse(JSON.parse(raw) as MediaMetadata);
 }
 
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+export async function deleteMedia(id: string): Promise<void> {
+  const raw = await redis.get(key(id));
+  if (!raw) throw AppError.notFound(`Media "${id}" not found. It may have expired or never existed.`);
+
+  // Remove all files from storage (original + every variant) in parallel
+  await storage.deleteFolder(id);
+
+  // Remove metadata from Redis
+  await redis.del(key(id));
+}
+
 // ─── Mark variant completed ───────────────────────────────────────────────────
 
 export async function markMediaVariantCompleted(

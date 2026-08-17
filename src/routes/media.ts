@@ -5,6 +5,7 @@ import {
   handleMediaUpload,
   handleMediaStatus,
   handleMediaVariant,
+  handleMediaDelete,
   handleHealth,
 } from '../controllers/mediaController.js';
 import { handleMetrics } from '../utils/metrics.js';
@@ -77,3 +78,16 @@ mediaRouter.get('/media/:id', handleMediaStatus);
  */
 mediaRouter.get('/media/:id/:variant', handleMediaVariant);
 mediaRouter.get('/media/:id/:variant/:seoname', handleMediaVariant);
+
+// ─── Delete ───────────────────────────────────────────────────────────────
+
+/**
+ * @route   DELETE /media/:id
+ * @desc    Permanently delete a media record and ALL its associated files
+ *          (original upload + every processed variant) from both storage and Redis.
+ *          This action is irreversible.
+ *
+ * @returns 200 { deleted: true, id, message, deletedAt }
+ *          404 if the id does not exist
+ */
+mediaRouter.delete('/media/:id', requireAuth, handleMediaDelete);

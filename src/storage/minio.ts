@@ -84,6 +84,23 @@ export class MinIOStorage implements StorageProvider {
     const key = this.objectKey(imageId, filename);
     return this.client.getObject(this.bucket, key);
   }
+
+  async deleteFolder(imageId: string): Promise<void> {
+    const prefix = `${imageId}/`;
+    const keys: string[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      const stream = this.client.listObjects(this.bucket, prefix, true);
+      stream.on('data',  (obj) => { if (obj.name) keys.push(obj.name); });
+      stream.on('end',   resolve);
+      stream.on('error', reject);
+    });
+
+    if (keys.length === 0) return; // nothing to delete
+
+    await this.client.removeObjects(this.bucket, keys);
+    logger.debug({ imageId, count: keys.length }, 'MinIOStorage: folder deleted');
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

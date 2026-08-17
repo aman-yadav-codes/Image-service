@@ -36,4 +36,11 @@ export interface StorageProvider {
    * buffering the entire file in memory.
    */
   createReadStream(imageId: string, filename: string): Promise<Readable>;
+
+  /**
+   * Delete all files stored under the given imageId (the entire "folder").
+   * Used when a media record is deleted — removes original + every variant.
+   * Resolves without error if nothing exists under that id.
+   */
+  deleteFolder(imageId: string): Promise<void>;
 }

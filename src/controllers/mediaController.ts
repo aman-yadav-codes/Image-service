@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { uploadMedia, getMediaStatus } from '../services/mediaService.js';
+import { uploadMedia, getMediaStatus, deleteMedia } from '../services/mediaService.js';
 import { storage } from '../storage/index.js';
 import { AppError } from '../utils/errors.js';
 
@@ -109,6 +109,23 @@ export async function handleMediaVariant(req: Request, res: Response, next: Next
     const stream = await storage.createReadStream(id, storageFilename);
     stream.on('error', next);
     stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── DELETE /media/:id ───────────────────────────────────────────────────────
+
+export async function handleMediaDelete(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params as { id: string };
+    await deleteMedia(id);
+    res.status(200).json({
+      deleted:   true,
+      id,
+      message:   `Media "${id}" and all its variants have been permanently deleted.`,
+      deletedAt: new Date().toISOString(),
+    });
   } catch (err) {
     next(err);
   }
