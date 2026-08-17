@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { uploadMedia, getMediaStatus, deleteMedia, updateMedia } from '../services/mediaService.js';
-import type { MediaUpdateInput } from '../services/mediaService.js';
+import { uploadMedia, getMediaStatus, deleteMedia, updateMedia, replaceMediaFile } from '../services/mediaService.js';
+import type { MediaUpdateInput, MediaReplaceInput } from '../services/mediaService.js';
 import { storage } from '../storage/index.js';
 import { AppError } from '../utils/errors.js';
 
@@ -110,6 +110,39 @@ export async function handleMediaVariant(req: Request, res: Response, next: Next
     const stream = await storage.createReadStream(id, storageFilename);
     stream.on('error', next);
     stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── PUT /media/:id/file ─────────────────────────────────────────────────────
+
+/**
+ * Replace the actual file for an existing media record.
+ * Wipes all old variants, saves the new original, and re-queues processing.
+ * The media ID stays the same — perfect for profile picture replacement.
+ */
+export async function handleMediaReplace(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params as { id: string };
+
+    if (!req.file) {
+      throw AppError.badRequest(
+        'No file uploaded. Send a multipart/form-data request with field name "file".',
+      );
+    }
+
+    const input: MediaReplaceInput = {
+      buffer:       req.file.buffer,
+      originalname: req.file.originalname,
+      mimetype:     req.file.mimetype,
+      size:         req.file.size,
+      name:         typeof req.body?.name === 'string' ? req.body.name : undefined,
+    };
+
+    const result = await replaceMediaFile(id, input);
+    // 202 Accepted — same as initial upload, processing is async
+    res.status(202).json(result);
   } catch (err) {
     next(err);
   }

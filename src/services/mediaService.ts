@@ -128,6 +128,95 @@ export async function deleteMedia(id: string): Promise<void> {
   await redis.del(key(id));
 }
 
+// ─── Replace file (PUT) ───────────────────────────────────────────────────────
+
+export interface MediaReplaceInput {
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+  size: number;
+  /** Keep the existing slug, or pass a new name to re-slugify. */
+  name?: string;
+}
+
+/**
+ * Replace the file of an existing media record while keeping the same ID.
+ *
+ * Steps:
+ *  1. Verify the record exists.
+ *  2. Delete every file in storage under this ID (original + all old variants).
+ *  3. Save the new original file.
+ *  4. Reset metadata: status → queued, variants → {}, completedVariants → [].
+ *  5. Re-enqueue processing jobs for the new file.
+ *
+ * Returns 202-style MediaResponse (status = "queued").
+ */
+export async function replaceMediaFile(
+  id: string,
+  input: MediaReplaceInput,
+): Promise<MediaResponse> {
+  const raw = await redis.get(key(id));
+  if (!raw) {
+    throw AppError.notFound(`Media "${id}" not found. It may have expired or never existed.`);
+  }
+
+  const existing = JSON.parse(raw) as MediaMetadata;
+
+  // Detect kind from new file — must be compatible MIME
+  const newKind = detectKind(input.mimetype);
+
+  const ext = path.extname(input.originalname) || inferExt(newKind, input.mimetype);
+  const originalFilename = `original${ext}`;
+  const now = nowIso();
+
+  // 1. Wipe all old files from storage (original + every variant)
+  await storage.deleteFolder(id);
+
+  // 2. Save the new original file
+  await storage.save(id, originalFilename, input.buffer, input.mimetype);
+
+  // 3. Build fresh metadata — preserve id, createdAt, and optionally slug
+  const newSlug = input.name
+    ? slugify(input.name)
+    : existing.slug; // keep old slug if no new name given
+
+  const metadata: MediaMetadata = {
+    id,
+    kind:              newKind,
+    status:            'queued',
+    originalFilename,
+    originalMimeType:  input.mimetype,
+    originalSizeBytes: input.size,
+    createdAt:         existing.createdAt, // preserve original upload date
+    updatedAt:         now,
+    completedVariants: [],
+    variants:          {},
+    ...(newSlug ? { slug: newSlug } : {}),
+  };
+
+  // Excel: no processing, mark complete immediately (same as uploadMedia)
+  if (newKind === 'excel') {
+    metadata.variants['original'] = originalFilename;
+    metadata.completedVariants = ['original'];
+    metadata.status = 'completed';
+  }
+
+  // 4. Persist reset metadata (refresh TTL)
+  await redis.set(key(id), JSON.stringify(metadata), 'EX', MEDIA_TTL);
+
+  // 5. Re-enqueue processing jobs
+  if (newKind !== 'excel') {
+    await enqueueMediaJobs({
+      mediaId:          id,
+      kind:             newKind,
+      originalFilename,
+      originalMimeType: input.mimetype,
+    });
+  }
+
+  return toResponse(metadata);
+}
+
 // ─── Update (PATCH) ───────────────────────────────────────────────────────────
 
 export interface MediaUpdateInput {

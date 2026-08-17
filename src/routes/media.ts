@@ -7,6 +7,7 @@ import {
   handleMediaVariant,
   handleMediaDelete,
   handleMediaUpdate,
+  handleMediaReplace,
   handleHealth,
 } from '../controllers/mediaController.js';
 import { handleMetrics } from '../utils/metrics.js';
@@ -74,6 +75,26 @@ mediaRouter.get('/media/:id', handleMediaStatus);
  *          404 if id not found
  */
 mediaRouter.patch('/media/:id', requireAuth, handleMediaUpdate);
+
+// ─── Replace file ───────────────────────────────────────────────────────────────
+
+/**
+ * @route   PUT /media/:id/file
+ * @desc    Replace the actual file of an existing media record, keeping the same ID.
+ *          - Deletes the original file AND every processed variant from storage.
+ *          - Saves the new file as the original.
+ *          - Resets status to "queued" and re-queues all processing jobs.
+ *          - preserves the original createdAt timestamp and slug (unless a new `name` is sent).
+ *
+ * @body    multipart/form-data
+ *   @field  file  (File, required) — the replacement file
+ *   @field  name  (string, optional) — new SEO name; if omitted, old slug is kept
+ *
+ * @returns 202 { id, status: "queued", ... }  — poll GET /media/:id for progress
+ *          400 if no file is attached or MIME type is unsupported
+ *          404 if the media ID does not exist
+ */
+mediaRouter.put('/media/:id/file', requireAuth, mediaUpload.single('file'), handleMediaReplace);
 
 // ─── Serve variant ────────────────────────────────────────────────────────────
 
