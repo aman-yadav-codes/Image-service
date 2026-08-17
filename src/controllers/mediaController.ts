@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import { uploadMedia, getMediaStatus, deleteMedia } from '../services/mediaService.js';
+import { uploadMedia, getMediaStatus, deleteMedia, updateMedia } from '../services/mediaService.js';
+import type { MediaUpdateInput } from '../services/mediaService.js';
 import { storage } from '../storage/index.js';
 import { AppError } from '../utils/errors.js';
 
@@ -109,6 +110,25 @@ export async function handleMediaVariant(req: Request, res: Response, next: Next
     const stream = await storage.createReadStream(id, storageFilename);
     stream.on('error', next);
     stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// ─── PATCH /media/:id ────────────────────────────────────────────────────────
+
+export async function handleMediaUpdate(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params as { id: string };
+    const body = req.body as Record<string, unknown>;
+
+    // Only forward known patchable fields — silently ignore anything else
+    const input: MediaUpdateInput = {};
+    if (typeof body.name === 'string')         input.name       = body.name;
+    if (body.clearError === true)              input.clearError = true;
+
+    const result = await updateMedia(id, input);
+    res.status(200).json(result);
   } catch (err) {
     next(err);
   }

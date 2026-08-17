@@ -128,6 +128,45 @@ export async function deleteMedia(id: string): Promise<void> {
   await redis.del(key(id));
 }
 
+// ─── Update (PATCH) ───────────────────────────────────────────────────────────
+
+export interface MediaUpdateInput {
+  /** Update the SEO-friendly name. Re-slugifies and regenerates all variant URLs. */
+  name?: string;
+  /** Explicitly clear a previous error message (e.g. after retrying manually). */
+  clearError?: boolean;
+}
+
+export async function updateMedia(id: string, input: MediaUpdateInput): Promise<MediaResponse> {
+  if (Object.keys(input).length === 0) {
+    throw AppError.badRequest(
+      'PATCH body is empty. Provide at least one of: name, clearError.',
+    );
+  }
+
+  const raw = await redis.get(key(id));
+  if (!raw) throw AppError.notFound(`Media "${id}" not found. It may have expired or never existed.`);
+
+  const meta = JSON.parse(raw) as MediaMetadata;
+
+  // ── Apply patches ────────────────────────────────────────────────────────────
+  if (input.name !== undefined) {
+    const slug = slugify(input.name);
+    if (!slug) throw AppError.badRequest('Provided "name" is empty after slugification.');
+    meta.slug = slug;
+  }
+
+  if (input.clearError === true) {
+    delete meta.error;
+  }
+
+  meta.updatedAt = nowIso();
+
+  await redis.set(key(id), JSON.stringify(meta), 'EX', MEDIA_TTL);
+
+  return toResponse(meta);
+}
+
 // ─── Mark variant completed ───────────────────────────────────────────────────
 
 export async function markMediaVariantCompleted(

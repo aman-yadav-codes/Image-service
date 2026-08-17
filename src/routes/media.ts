@@ -6,6 +6,7 @@ import {
   handleMediaStatus,
   handleMediaVariant,
   handleMediaDelete,
+  handleMediaUpdate,
   handleHealth,
 } from '../controllers/mediaController.js';
 import { handleMetrics } from '../utils/metrics.js';
@@ -55,6 +56,24 @@ mediaRouter.post('/media/upload', requireAuth, mediaUpload.single('file'), handl
  * @example   GET /media/media_550e8400-...
  */
 mediaRouter.get('/media/:id', handleMediaStatus);
+
+// ─── Update (PATCH) ──────────────────────────────────────────────────────────────
+
+/**
+ * @route   PATCH /media/:id
+ * @desc    Update mutable metadata for a media record.
+ *          Only user-supplied fields can be changed; processing state is immutable.
+ *
+ * @body    application/json
+ *   @field  name        (string?)  — New SEO-friendly name. Re-slugified and
+ *                                   applied to all variant URLs immediately.
+ *   @field  clearError  (boolean?) — Pass `true` to clear a previous error message.
+ *
+ * @returns 200 full updated MediaResponse
+ *          400 if body is empty or name slugifies to empty string
+ *          404 if id not found
+ */
+mediaRouter.patch('/media/:id', requireAuth, handleMediaUpdate);
 
 // ─── Serve variant ────────────────────────────────────────────────────────────
 
