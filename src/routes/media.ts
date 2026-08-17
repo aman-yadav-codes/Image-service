@@ -79,12 +79,12 @@ mediaRouter.patch('/media/:id', requireAuth, handleMediaUpdate);
 // ─── Replace file ───────────────────────────────────────────────────────────────
 
 /**
- * @route   PUT /media/:id/file
+ * @route   PUT /media/:id
  * @desc    Replace the actual file of an existing media record, keeping the same ID.
  *          - Deletes the original file AND every processed variant from storage.
  *          - Saves the new file as the original.
  *          - Resets status to "queued" and re-queues all processing jobs.
- *          - preserves the original createdAt timestamp and slug (unless a new `name` is sent).
+ *          - Preserves the original createdAt timestamp and slug (unless a new `name` is sent).
  *
  * @body    multipart/form-data
  *   @field  file  (File, required) — the replacement file
@@ -94,7 +94,7 @@ mediaRouter.patch('/media/:id', requireAuth, handleMediaUpdate);
  *          400 if no file is attached or MIME type is unsupported
  *          404 if the media ID does not exist
  */
-mediaRouter.put('/media/:id/file', requireAuth, mediaUpload.single('file'), handleMediaReplace);
+mediaRouter.put('/media/:id', requireAuth, mediaUpload.single('file'), handleMediaReplace);
 
 // ─── Serve variant ────────────────────────────────────────────────────────────
 
