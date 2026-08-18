@@ -12,12 +12,14 @@ import { metricsMiddleware } from '../utils/metrics.js';
 export function createApp() {
   const app = express();
 
-  app.use(cors({
-    origin: '*',
+  const corsOptions: cors.CorsOptions = {
+    origin: config.api.corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-  }));
-  app.options('*', cors());
+    credentials: true,
+  };
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
 
   app.use(metricsMiddleware);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
