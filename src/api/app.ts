@@ -13,9 +13,9 @@ export function createApp() {
   const app = express();
 
   const corsOptions: cors.CorsOptions = {
-    origin: config.api.corsOrigins,
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
     credentials: true,
   };
   app.use(cors(corsOptions));

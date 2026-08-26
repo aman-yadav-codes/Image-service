@@ -7,6 +7,11 @@ import { logger } from '../utils/logger.js';
 const AUTH_SERVER_URL = process.env['AUTH_SERVER_URL'] ?? '';
 const AUTH_SESSION_ENDPOINT = process.env['AUTH_SESSION_ENDPOINT'] ?? '/api/auth/get-session';
 const SESSION_COOKIE_NAME = process.env['SESSION_COOKIE_NAME'] ?? 'better-auth.session_token';
+const SESSION_COOKIE_NAMES = new Set([
+  SESSION_COOKIE_NAME,
+  '__Secure-better-auth.session_token',
+  'better-auth.session_token',
+]);
 
 // ─── Simple in-memory cache (avoids hammering the auth server) ────────────────
 
@@ -49,7 +54,7 @@ function extractToken(req: Request): string | null {
   const rawCookies = req.headers['cookie'] ?? '';
   for (const part of rawCookies.split(';')) {
     const [name, ...rest] = part.trim().split('=');
-    if (name?.trim() === SESSION_COOKIE_NAME) {
+    if (name && SESSION_COOKIE_NAMES.has(name.trim())) {
       return decodeURIComponent(rest.join('=').trim());
     }
   }

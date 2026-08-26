@@ -4,7 +4,7 @@
 
 | Service | Host Port | Internal Port | Purpose |
 |---|---|---|---|
-| `image-api` | **4001** | 4000 | REST API + `/metrics` endpoint |
+| `media-api` | **4001** | 4000 | REST API + `/metrics` endpoint |
 | `minio` | **9000** | 9000 | S3-compatible object store API |
 | `minio` | **9001** | 9001 | MinIO web console |
 | `redis` | 6379 (127.0.0.1 only) | 6379 | BullMQ broker — not exposed externally |
@@ -27,8 +27,8 @@
 ## 1. Clone & Configure
 
 ```bash
-git clone <your-repo-url> /opt/image-service
-cd /opt/image-service/Image-service
+git clone <your-repo-url> /opt/media-service
+cd /opt/media-service
 cp .env.example .env
 nano .env
 ```
@@ -40,7 +40,7 @@ MINIO_PUBLIC_ENDPOINT=http://YOUR_SERVER_IP:9000
 MINIO_ACCESS_KEY=your-strong-access-key
 MINIO_SECRET_KEY=your-strong-secret-key-min-16-chars
 REDIS_PASSWORD=your-strong-redis-password
-DATA_ROOT=/srv/image-service
+DATA_ROOT=/srv/media-service
 ```
 
 ---
@@ -48,8 +48,8 @@ DATA_ROOT=/srv/image-service
 ## 2. Prepare Data Directories (Ubuntu)
 
 ```bash
-sudo mkdir -p /srv/image-service/{minio,redis}
-sudo chown -R $USER:$USER /srv/image-service
+sudo mkdir -p /srv/media-service/{minio,redis}
+sudo chown -R $USER:$USER /srv/media-service
 ```
 
 ---
@@ -57,7 +57,7 @@ sudo chown -R $USER:$USER /srv/image-service
 ## 3. Build & Start
 
 ```bash
-cd /opt/image-service/Image-service
+cd /opt/media-service
 docker compose up --build -d
 ```
 
@@ -71,11 +71,11 @@ Expected:
 
 ```
 NAME                        STATUS
-image-service-redis         running (healthy)
-image-service-minio         running (healthy)
-image-service-minio-init    exited (0)          ← normal — runs once and exits
-image-service-api           running (healthy)
-image-service-worker-1      running
+media-service-redis         running (healthy)
+media-service-minio         running (healthy)
+media-service-minio-init    exited (0)          ← normal — runs once and exits
+media-service-api           running (healthy)
+media-service-worker-1      running
 ```
 
 ---
@@ -87,7 +87,7 @@ curl http://localhost:4001/health
 ```
 
 ```json
-{ "status": "ok", "service": "image-api", "timestamp": "..." }
+{ "status": "ok", "service": "media-api", "timestamp": "..." }
 ```
 
 ---
@@ -102,7 +102,7 @@ Login with your `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`.
 ## 6. Scale Workers
 
 ```bash
-docker compose up -d --scale image-worker=4
+docker compose up -d --scale media-worker=4
 ```
 
 ---
@@ -119,12 +119,12 @@ GET http://YOUR_SERVER_IP:4001/metrics
 
 ```yaml
 scrape_configs:
-  - job_name: 'image-service'
+  - job_name: 'media-service'
     scrape_interval: 15s
     static_configs:
       - targets: ['YOUR_SERVER_IP:4001']
 
-  - job_name: 'image-service-minio'
+  - job_name: 'media-service-minio'
     metrics_path: /minio/v2/metrics/cluster
     static_configs:
       - targets: ['YOUR_SERVER_IP:9000']
@@ -133,8 +133,6 @@ scrape_configs:
 **Available custom metrics:**
 - `http_request_duration_seconds` — latency by route
 - `http_requests_total` — request count by method/route/status
-- `image_uploads_total` — uploads (success / error labels)
-- `image_upload_size_bytes` — upload size distribution
 - `bullmq_queue_jobs_total` — queue depth by status
 - Standard Node.js process metrics (CPU, memory, event loop)
 
@@ -145,16 +143,17 @@ scrape_configs:
 ### Upload
 
 ```
-POST http://YOUR_SERVER_IP:4001/images/upload
+POST http://YOUR_SERVER_IP:4001/media/upload
 Body → form-data
-  image: <file>          (required — max 20 MB)
-  slug:  "my-photo"      (optional SEO slug)
+  file: <file>           (required — max 500 MB)
+  name: "my-photo"       (optional SEO name)
 ```
 
 **Response `202`:**
 ```json
 {
-  "id": "img_550e8400-e29b-41d4-a716-446655440000",
+  "id": "media_550e8400-e29b-41d4-a716-446655440000",
+  "kind": "image",
   "status": "queued",
   "originalFilename": "photo.jpg"
 }
@@ -163,19 +162,20 @@ Body → form-data
 ### Poll Status
 
 ```
-GET http://YOUR_SERVER_IP:4001/images/<id>
+GET http://YOUR_SERVER_IP:4001/media/<id>
 ```
 
 **Response `200` (completed):**
 ```json
 {
-  "id": "img_...",
+  "id": "media_...",
+  "kind": "image",
   "status": "completed",
   "variants": {
-    "thumbnail": "http://YOUR_SERVER_IP:9000/images/img_.../thumbnail.webp",
-    "display":   "http://YOUR_SERVER_IP:9000/images/img_.../display.webp",
-    "large":     "http://YOUR_SERVER_IP:9000/images/img_.../large.webp",
-    "print":     "http://YOUR_SERVER_IP:9000/images/img_.../print.png"
+    "thumbnail": "/media/media_.../thumbnail.webp",
+    "display":   "/media/media_.../display.webp",
+    "large":     "/media/media_.../large.webp",
+    "print":     "/media/media_.../print.jpg"
   }
 }
 ```
@@ -215,8 +215,8 @@ server {
 
 ```bash
 docker compose logs -f             # all services
-docker compose logs -f image-api   # API only
-docker compose logs -f image-worker # workers only
+docker compose logs -f media-api    # API only
+docker compose logs -f media-worker # workers only
 ```
 
 ---
@@ -225,8 +225,8 @@ docker compose logs -f image-worker # workers only
 
 ```bash
 docker compose down                          # stop (data preserved)
-docker compose restart image-api             # restart one service
-docker compose up -d --scale image-worker=4  # scale workers
+docker compose restart media-api             # restart one service
+docker compose up -d --scale media-worker=4  # scale workers
 ```
 
 ---
@@ -237,9 +237,9 @@ docker compose up -d --scale image-worker=4  # scale workers
 - [ ] Set `REDIS_PASSWORD`
 - [ ] Set `NODE_ENV=production`, `LOG_PRETTY=false`
 - [ ] Update `MINIO_PUBLIC_ENDPOINT` to your server IP / CDN domain
-- [ ] Confirm `DATA_ROOT=/srv/image-service` and directories exist
+- [ ] Confirm `DATA_ROOT=/srv/media-service` and directories exist
 - [ ] Add scrape targets to global Prometheus config
-- [ ] Scale workers: `docker compose up -d --scale image-worker=2`
+- [ ] Scale workers: `docker compose up -d --scale media-worker=2`
 - [ ] (Optional) Put Nginx in front of port 4001
 
 ---
@@ -261,11 +261,11 @@ docker compose up -d --scale image-worker=4  # scale workers
 | `MINIO_CONSOLE_PORT` | `9001` | MinIO console port |
 | `MINIO_ACCESS_KEY` | — | MinIO username |
 | `MINIO_SECRET_KEY` | — | MinIO password |
-| `MINIO_BUCKET` | `images` | Storage bucket name |
+| `MINIO_BUCKET` | `media` | Storage bucket name |
 | `MINIO_PUBLIC_ENDPOINT` | — | Browser-accessible MinIO URL |
-| `MAX_FILE_SIZE_BYTES` | `20971520` | Upload limit (20 MB) |
+| `MEDIA_MAX_FILE_SIZE_BYTES` | `524288000` | Upload limit (500 MB) |
 | `WORKER_CONCURRENCY` | `2` | Jobs per worker process |
 | `JOB_MAX_RETRIES` | `3` | Max retry attempts |
 | `WORKER_CPU_LIMIT` | `1.0` | CPU limit per worker container |
 | `WORKER_MEMORY_LIMIT` | `512M` | Memory limit per worker container |
-| `DATA_ROOT` | `/srv/image-service` | Host path for persistent storage |
+| `DATA_ROOT` | `/srv/media-service` | Host path for persistent storage |

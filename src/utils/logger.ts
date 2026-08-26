@@ -16,7 +16,7 @@ export const logger = pino(
   {
     level: config.log.level,
     base: {
-      service: 'image-service',
+      service: 'media-service',
       env: config.env,
     },
     timestamp: pino.stdTimeFunctions.isoTime,

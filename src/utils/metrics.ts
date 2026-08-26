@@ -1,6 +1,6 @@
 import client from 'prom-client';
 import type { Request, Response, NextFunction } from 'express';
-import { imageQueue } from '../queues/imageQueue.js';
+import { mediaQueue } from '../queues/mediaQueue.js';
 import { logger } from './logger.js';
 
 // ─── Initialize Registry ──────────────────────────────────────────────────────
@@ -29,27 +29,11 @@ const httpRequestsTotal = new client.Counter({
 });
 registry.registerMetric(httpRequestsTotal);
 
-/** Total image uploads counter */
-export const imageUploadsTotal = new client.Counter({
-  name: 'image_uploads_total',
-  help: 'Total number of uploaded images',
-  labelNames: ['status'], // success, error
-});
-registry.registerMetric(imageUploadsTotal);
-
-/** Image upload file size tracker */
-export const imageUploadSizeBytes = new client.Histogram({
-  name: 'image_upload_size_bytes',
-  help: 'Size of uploaded image files in bytes',
-  buckets: [1024 * 100, 1024 * 500, 1024 * 1024, 1024 * 1024 * 5, 1024 * 1024 * 10, 1024 * 1024 * 20],
-});
-registry.registerMetric(imageUploadSizeBytes);
-
 // ─── BullMQ Queue Gauges ──────────────────────────────────────────────────────
 
 const queueJobsGauge = new client.Gauge({
   name: 'bullmq_queue_jobs_total',
-  help: 'Total number of jobs in the image processing queue grouped by status',
+  help: 'Total number of jobs in the media processing queue grouped by status',
   labelNames: ['queue', 'status'],
 });
 registry.registerMetric(queueJobsGauge);
@@ -60,8 +44,8 @@ registry.registerMetric(queueJobsGauge);
  */
 async function updateQueueMetrics(): Promise<void> {
   try {
-    const queueName = imageQueue.name;
-    const counts = await imageQueue.getJobCounts(
+    const queueName = mediaQueue.name;
+    const counts = await mediaQueue.getJobCounts(
       'active',
       'completed',
       'failed',

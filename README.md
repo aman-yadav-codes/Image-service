@@ -1,63 +1,72 @@
 # Media Processing Microservice
 
-Production-ready, horizontally scalable image, video, and PDF processing API built with Node.js, TypeScript, Sharp, FFmpeg, qpdf, Ghostscript, BullMQ, Redis, and MinIO.
+Production-ready, horizontally scalable media processing API for images, videos, PDFs, and Excel files. Built with Node.js, TypeScript, Sharp, FFmpeg, Ghostscript, BullMQ, Redis, and MinIO.
 
 ## Architecture
 
 ```text
-POST /images/upload                    POST /media/upload
-        │                                      │
-        ▼                                      ▼
-   Image Queue                            Media Queue
-        │                                      │
-   Sharp Workers                    ┌──────────┴──────────┐
-        │                           │                     │
-        │                       FFmpeg Worker         PDF Worker
-        │                           │                     │
-        └───────────────┬───────────┴─────────────────────┘
-                        ▼
-                      MinIO
+POST /media/upload
+        |
+        v
+   Media Queue
+        |
+        +-- Sharp image variants
+        +-- FFmpeg video variants
+        +-- Ghostscript PDF compression
+        +-- Excel pass-through
+        |
+        v
+      MinIO
 ```
 
-The original image pipeline remains unchanged. Media processing uses a separate BullMQ queue and dedicated workers so CPU-heavy video/PDF jobs cannot starve image processing.
+All uploads go through the unified `/media` API.
 
 ## Media Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/media/upload` | Upload a video or PDF (`file` multipart field) |
+| `POST` | `/media/upload` | Upload an image, video, PDF, or Excel file (`file` multipart field) |
 | `GET` | `/media/:id` | Poll processing status |
 | `GET` | `/media/:id/:variant` | Stream a processed variant |
+| `GET` | `/media/:id/:variant/:seoname` | Stream a processed variant with SEO filename |
+| `PATCH` | `/media/:id` | Update mutable metadata |
+| `PUT` | `/media/:id` | Replace the file for an existing media record |
+| `DELETE` | `/media/:id` | Delete a media record and its files |
 
-### Video variants
+## Upload Example
 
-- `720p` — H.264/AAC MP4, CRF 23
-- `480p` — H.264/AAC MP4, CRF 25
-- `poster` — JPEG preview frame
+```text
+POST /media/upload
+Content-Type: multipart/form-data
+Cookie: __Secure-better-auth.session_token=<session-token>
 
-FFmpeg is used for transcoding and `+faststart` is enabled for browser-friendly MP4 playback.
+file: <file>
+name: my-photo
+```
 
-### PDF variants
+The service also accepts `Authorization: Bearer <session-token>` for tools such as Postman.
 
-- `lossless` — qpdf structural/object-stream optimization. No intentional image-quality reduction.
-- `balanced` — Ghostscript `/ebook` optimization. Smaller output with image recompression/downsampling where applicable.
+## Variants
 
-Lossless PDF compression cannot guarantee a smaller file for every PDF, especially when images are already compressed.
+Image uploads create `thumbnail`, `display`, `large`, and `print` variants.
+Video uploads create `hd`, `medium`, and `low` MP4 variants.
+PDF uploads create a `compressed` PDF variant.
+Excel files are stored as `original` and marked complete immediately.
 
 ## Scaling
 
-Run image and media workers independently:
+Run media workers independently:
 
 ```bash
 docker compose up -d --build
-docker compose up -d --scale image-worker=4 --scale media-worker=2
+docker compose up -d --scale media-worker=2
 ```
 
-Media worker concurrency is controlled by `MEDIA_WORKER_CONCURRENCY` (default `2`). Video encoding is CPU-intensive, so scale media workers according to available CPU and memory.
+Media worker concurrency is controlled by `MEDIA_WORKER_CONCURRENCY` (default `2`). Video encoding is CPU-intensive, so scale workers according to available CPU and memory.
 
 ## Storage
 
-MinIO stores originals privately by object key and processed variants alongside them. Processed variants are served through the API and can also be exposed through the configured object-store/CDN layer.
+MinIO stores originals privately by object key and processed variants alongside them. Processed variants are served through the `/media` API and can also be exposed through the configured object-store/CDN layer.
 
 ## Local Development
 
@@ -65,11 +74,11 @@ MinIO stores originals privately by object key and processed variants alongside 
 cp .env.example .env
 npm install
 npm run dev:api
-npm run dev:worker
+npm run dev:media-worker
 ```
 
-For media processing, the worker host must have `ffmpeg`, `qpdf`, and `gs` (Ghostscript) installed. Docker is recommended because the media worker image includes these tools.
+For media processing, the worker host must have `ffmpeg` and `gs` (Ghostscript) installed. Docker is recommended because the media worker image includes these tools.
 
-## Safety limits
+## Safety Limits
 
 `MEDIA_MAX_FILE_SIZE_BYTES` defaults to 500 MB. Accepted media MIME types are configurable with `MEDIA_ALLOWED_MIME_TYPES`.
