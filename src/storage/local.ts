@@ -61,6 +61,22 @@ export class LocalStorage implements StorageProvider {
     return fs.createReadStream(filePath);
   }
 
+  async listFiles(imageId: string): Promise<string[]> {
+    const dir = path.join(this.basePath, imageId);
+    try {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .sort();
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      throw err;
+    }
+  }
+
   async deleteFolder(imageId: string): Promise<void> {
     const dir = path.join(this.basePath, imageId);
     try {

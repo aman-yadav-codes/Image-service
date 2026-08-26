@@ -38,6 +38,13 @@ export interface StorageProvider {
   createReadStream(imageId: string, filename: string): Promise<Readable>;
 
   /**
+   * List every file currently stored under the given imageId.
+   * Used to recover media metadata when Redis cache state is lost but object
+   * storage still contains the uploaded variants.
+   */
+  listFiles(imageId: string): Promise<string[]>;
+
+  /**
    * Delete all files stored under the given imageId (the entire "folder").
    * Used when a media record is deleted — removes original + every variant.
    * Resolves without error if nothing exists under that id.

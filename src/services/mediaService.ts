@@ -8,7 +8,16 @@ import { nowIso } from '../utils/helpers.js';
 import type { MediaKind, MediaMetadata, MediaResponse } from '../types/media.js';
 
 const redis = createRedisConnection();
-const MEDIA_TTL = 7 * 24 * 60 * 60; // 7 days
+const MEDIA_VARIANT_FILENAMES: Record<string, string> = {
+  thumbnail: 'thumbnail.webp',
+  display: 'display.webp',
+  large: 'large.webp',
+  print: 'print.jpg',
+  compressed: 'compressed.pdf',
+  hd: 'hd.mp4',
+  medium: 'medium.mp4',
+  low: 'low.mp4',
+};
 
 // ─── MIME type → kind detection ───────────────────────────────────────────────
 
@@ -97,7 +106,7 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
   await storage.save(id, originalFilename, input.buffer, input.mimetype);
 
   // Persist metadata
-  await redis.set(key(id), JSON.stringify(metadata), 'EX', MEDIA_TTL);
+  await persistMediaMetadata(metadata);
 
   // Enqueue processing jobs (excel will enqueue an "original" job that's a no-op)
   if (kind !== 'excel') {
@@ -111,8 +120,17 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
 
 export async function getMediaStatus(id: string): Promise<MediaResponse> {
   const raw = await redis.get(key(id));
-  if (!raw) throw AppError.notFound(`Media "${id}" not found. It may have expired or never existed.`);
-  return toResponse(JSON.parse(raw) as MediaMetadata);
+  if (raw) {
+    return toResponse(JSON.parse(raw) as MediaMetadata);
+  }
+
+  const recovered = await recoverMediaFromStorage(id);
+  if (!recovered) {
+    throw AppError.notFound(`Media "${id}" not found. It may have expired or never existed.`);
+  }
+
+  await persistMediaMetadata(recovered);
+  return toResponse(recovered);
 }
 
 // ─── Delete ───────────────────────────────────────────────────────────────────
@@ -202,7 +220,7 @@ export async function replaceMediaFile(
   }
 
   // 4. Persist reset metadata (refresh TTL)
-  await redis.set(key(id), JSON.stringify(metadata), 'EX', MEDIA_TTL);
+  await persistMediaMetadata(metadata);
 
   // 5. Re-enqueue processing jobs
   if (newKind !== 'excel') {
@@ -251,7 +269,7 @@ export async function updateMedia(id: string, input: MediaUpdateInput): Promise<
 
   meta.updatedAt = nowIso();
 
-  await redis.set(key(id), JSON.stringify(meta), 'EX', MEDIA_TTL);
+  await persistMediaMetadata(meta);
 
   return toResponse(meta);
 }
@@ -278,7 +296,7 @@ export async function markMediaVariantCompleted(
     ? 'completed'
     : 'processing';
 
-  await redis.set(key(id), JSON.stringify(meta), 'EX', MEDIA_TTL);
+  await persistMediaMetadata(meta);
 }
 
 // ─── Mark failed ──────────────────────────────────────────────────────────────
@@ -291,7 +309,78 @@ export async function markMediaFailed(id: string, rawError: string): Promise<voi
   // Extract the first meaningful error line — don't dump full ffmpeg/gs output
   meta.error = extractError(rawError);
   meta.updatedAt = nowIso();
-  await redis.set(key(id), JSON.stringify(meta), 'EX', MEDIA_TTL);
+  await persistMediaMetadata(meta);
+}
+
+async function persistMediaMetadata(meta: MediaMetadata): Promise<void> {
+  await redis.set(key(meta.id), JSON.stringify(meta));
+}
+
+async function recoverMediaFromStorage(id: string): Promise<MediaMetadata | null> {
+  const files = await storage.listFiles(id);
+  if (files.length === 0) {
+    return null;
+  }
+
+  const variants = Object.fromEntries(
+    Object.entries(MEDIA_VARIANT_FILENAMES)
+      .filter(([, filename]) => files.includes(filename)),
+  );
+  const originalFilename = files.find((filename) => filename.startsWith('original.')) ?? files[0];
+  const kind = inferKindFromFiles(files);
+  const now = nowIso();
+
+  if (kind === 'excel' && originalFilename) {
+    variants.original = originalFilename;
+  }
+
+  return {
+    id,
+    kind,
+    status: 'completed',
+    originalFilename,
+    originalMimeType: contentTypeFromFilename(originalFilename),
+    originalSizeBytes: 0,
+    createdAt: now,
+    updatedAt: now,
+    completedVariants: Object.keys(variants) as MediaMetadata['completedVariants'],
+    variants,
+  };
+}
+
+function inferKindFromFiles(files: string[]): MediaKind {
+  if (files.some((filename) => ['thumbnail.webp', 'display.webp', 'large.webp', 'print.jpg'].includes(filename))) {
+    return 'image';
+  }
+
+  if (files.some((filename) => ['hd.mp4', 'medium.mp4', 'low.mp4'].includes(filename))) {
+    return 'video';
+  }
+
+  if (files.includes('compressed.pdf') || files.some((filename) => filename.endsWith('.pdf'))) {
+    return 'pdf';
+  }
+
+  return 'excel';
+}
+
+function contentTypeFromFilename(filename: string): string {
+  const ext = path.extname(filename).toLowerCase();
+  const map: Record<string, string> = {
+    '.webp': 'image/webp',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.avif': 'image/avif',
+    '.pdf': 'application/pdf',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.csv': 'text/csv',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+  return map[ext] ?? 'application/octet-stream';
 }
 
 /** Pull the first recognisable error line out of a long command output string. */

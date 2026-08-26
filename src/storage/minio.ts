@@ -85,6 +85,24 @@ export class MinIOStorage implements StorageProvider {
     return this.client.getObject(this.bucket, key);
   }
 
+  async listFiles(imageId: string): Promise<string[]> {
+    const prefix = `${imageId}/`;
+    const filenames: string[] = [];
+
+    await new Promise<void>((resolve, reject) => {
+      const stream = this.client.listObjects(this.bucket, prefix, true);
+      stream.on('data', (obj) => {
+        if (obj.name?.startsWith(prefix)) {
+          filenames.push(obj.name.slice(prefix.length));
+        }
+      });
+      stream.on('end', resolve);
+      stream.on('error', reject);
+    });
+
+    return filenames.filter(Boolean).sort();
+  }
+
   async deleteFolder(imageId: string): Promise<void> {
     const prefix = `${imageId}/`;
     const keys: string[] = [];
