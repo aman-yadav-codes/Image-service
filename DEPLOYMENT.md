@@ -102,8 +102,10 @@ Login with your `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY`.
 ## 6. Scale Workers
 
 ```bash
-docker compose up -d --scale media-worker=4
+MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker
 ```
+
+Each replica consumes from the same BullMQ queue. Keep per-replica concurrency and CPU limits conservative so a traffic spike cannot monopolize the VPS.
 
 ---
 
@@ -226,7 +228,7 @@ docker compose logs -f media-worker # workers only
 ```bash
 docker compose down                          # stop (data preserved)
 docker compose restart media-api             # restart one service
-docker compose up -d --scale media-worker=4  # scale workers
+MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker  # scale workers
 ```
 
 ---
@@ -239,7 +241,7 @@ docker compose up -d --scale media-worker=4  # scale workers
 - [ ] Update `MINIO_PUBLIC_ENDPOINT` to your server IP / CDN domain
 - [ ] Confirm `DATA_ROOT=/srv/media-service` and directories exist
 - [ ] Add scrape targets to global Prometheus config
-- [ ] Scale workers: `docker compose up -d --scale media-worker=2`
+- [ ] Set `MEDIA_WORKER_REPLICAS` and bounded per-worker CPU/memory limits
 - [ ] (Optional) Put Nginx in front of port 4001
 
 ---

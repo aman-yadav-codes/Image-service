@@ -3,11 +3,17 @@ import * as path from 'path';
 function required(key: string): string { const val = process.env[key]; if (!val) throw new Error(`Missing required environment variable: ${key}`); return val; }
 function optional(key: string, fallback: string): string { return process.env[key] ?? fallback; }
 function optionalNumber(key: string, fallback: number): number { const val = process.env[key]; return val ? parseInt(val, 10) : fallback; }
+function optionalBoolean(key: string, fallback: boolean): boolean {
+  const val = process.env[key];
+  if (val === undefined) return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(val.trim().toLowerCase());
+}
 
 export const config = {
   env: optional('NODE_ENV', 'development') as 'development' | 'production' | 'test',
   api: {
     port: optionalNumber('PORT', 4000), host: optional('HOST', '0.0.0.0'),
+    rateLimitEnabled: optionalBoolean('RATE_LIMIT_ENABLED', true),
     rateLimitWindowMs: optionalNumber('RATE_LIMIT_WINDOW_MS', 60_000), rateLimitMax: optionalNumber('RATE_LIMIT_MAX', 200),
     corsOrigins: optional('CORS_ORIGINS', 'https://new.findmy.co.za,http://localhost:3000,http://localhost:5173,http://localhost:4000,http://127.0.0.1:3000').split(',').map((o) => o.trim()).filter(Boolean),
   },

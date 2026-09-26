@@ -281,36 +281,77 @@ export async function markMediaVariantCompleted(
   variant: MediaMetadata['completedVariants'][number],
   filename: string,
 ): Promise<void> {
-  const raw = await redis.get(key(id));
-  if (!raw) return;
-
-  const meta = JSON.parse(raw) as MediaMetadata;
-  if (!meta.completedVariants.includes(variant)) {
-    meta.completedVariants.push(variant);
-  }
-  meta.variants[variant] = filename;
-  meta.updatedAt = nowIso();
-
-  const required = getVariantsForKind(meta.kind);
-  meta.status = required.every((v) => meta.completedVariants.includes(v as typeof variant))
-    ? 'completed'
-    : 'processing';
-
-  await persistMediaMetadata(meta);
+  await redis.eval(
+    MARK_VARIANT_COMPLETED_SCRIPT,
+    1,
+    key(id),
+    variant,
+    filename,
+    nowIso(),
+  );
 }
 
 // ─── Mark failed ──────────────────────────────────────────────────────────────
 
 export async function markMediaFailed(id: string, rawError: string): Promise<void> {
-  const raw = await redis.get(key(id));
-  if (!raw) return;
-  const meta = JSON.parse(raw) as MediaMetadata;
-  meta.status = 'failed';
-  // Extract the first meaningful error line — don't dump full ffmpeg/gs output
-  meta.error = extractError(rawError);
-  meta.updatedAt = nowIso();
-  await persistMediaMetadata(meta);
+  await redis.eval(
+    MARK_MEDIA_FAILED_SCRIPT,
+    1,
+    key(id),
+    extractError(rawError),
+    nowIso(),
+  );
 }
+
+const MARK_VARIANT_COMPLETED_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 0 end
+
+local meta = cjson.decode(raw)
+local variant = ARGV[1]
+meta.completedVariants = meta.completedVariants or {}
+meta.variants = meta.variants or {}
+local found = false
+for _, current in ipairs(meta.completedVariants) do
+  if current == variant then found = true break end
+end
+if not found then table.insert(meta.completedVariants, variant) end
+
+meta.variants[variant] = ARGV[2]
+meta.updatedAt = ARGV[3]
+
+if meta.error then
+  meta.status = 'failed'
+else
+  local requiredByKind = {
+    image = {'thumbnail', 'display', 'large', 'print'},
+    video = {'hd', 'medium', 'low'},
+    pdf = {'compressed'},
+    excel = {'original'}
+  }
+  local completed = {}
+  for _, current in ipairs(meta.completedVariants) do completed[current] = true end
+  local allCompleted = true
+  for _, required in ipairs(requiredByKind[meta.kind] or {}) do
+    if not completed[required] then allCompleted = false break end
+  end
+  meta.status = allCompleted and 'completed' or 'processing'
+end
+
+redis.call('SET', KEYS[1], cjson.encode(meta))
+return 1
+`;
+
+const MARK_MEDIA_FAILED_SCRIPT = `
+local raw = redis.call('GET', KEYS[1])
+if not raw then return 0 end
+local meta = cjson.decode(raw)
+meta.status = 'failed'
+meta.error = ARGV[1]
+meta.updatedAt = ARGV[2]
+redis.call('SET', KEYS[1], cjson.encode(meta))
+return 1
+`;
 
 async function persistMediaMetadata(meta: MediaMetadata): Promise<void> {
   await redis.set(key(meta.id), JSON.stringify(meta));

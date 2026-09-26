@@ -55,14 +55,13 @@ Excel files are stored as `original` and marked complete immediately.
 
 ## Scaling
 
-Run media workers independently:
+Workers share one BullMQ queue, so concurrent uploads are automatically distributed across idle worker containers. The defaults run two replicas with one job per replica and a `0.75` CPU limit each, keeping transformation load bounded on a four-core VPS.
 
 ```bash
 docker compose up -d --build
-docker compose up -d --scale media-worker=2
 ```
 
-Media worker concurrency is controlled by `MEDIA_WORKER_CONCURRENCY` (default `2`). Video encoding is CPU-intensive, so scale workers according to available CPU and memory.
+Capacity is configured through `MEDIA_WORKER_REPLICAS`, `MEDIA_WORKER_CONCURRENCY`, `MEDIA_WORKER_CPU_LIMIT`, and `MEDIA_WORKER_MEMORY_LIMIT`. Increase those environment values when the VPS gains more cores; no code change is required. BullMQ retries failed jobs and its shared Redis queue provides backpressure when uploads temporarily arrive faster than workers can transform them.
 
 ## Storage
 

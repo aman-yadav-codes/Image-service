@@ -38,17 +38,21 @@ export function createApp() {
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
 
-  app.use(rateLimit({
-    windowMs: config.api.rateLimitWindowMs,
-    max: config.api.rateLimitMax,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'You have exceeded the request rate limit. Please slow down.',
-    },
-  }));
+  if (config.api.rateLimitEnabled) {
+    app.use(rateLimit({
+      windowMs: config.api.rateLimitWindowMs,
+      max: config.api.rateLimitMax,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'You have exceeded the request rate limit. Please slow down.',
+      },
+    }));
+  } else {
+    logger.warn('API rate limiting is disabled');
+  }
 
   // All routes live under /media (plus /health and /metrics)
   app.use('/', mediaRouter);
