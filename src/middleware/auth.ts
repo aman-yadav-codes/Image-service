@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'node:crypto';
 import { AppError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
@@ -7,6 +8,7 @@ import { logger } from '../utils/logger.js';
 const AUTH_SERVER_URL = process.env['AUTH_SERVER_URL'] ?? '';
 const AUTH_SESSION_ENDPOINT = process.env['AUTH_SESSION_ENDPOINT'] ?? '/api/auth/get-session';
 const SESSION_COOKIE_NAME = process.env['SESSION_COOKIE_NAME'] ?? 'better-auth.session_token';
+const MEDIA_INTERNAL_TOKEN = process.env['MEDIA_INTERNAL_TOKEN'] ?? '';
 const SESSION_COOKIE_NAMES = new Set([
   SESSION_COOKIE_NAME,
   '__Secure-better-auth.session_token',
@@ -60,6 +62,17 @@ function extractToken(req: Request): string | null {
   }
 
   return null;
+}
+
+function hasValidInternalToken(req: Request): boolean {
+  if (!MEDIA_INTERNAL_TOKEN) return false;
+  const candidate = req.headers['x-media-internal-token'];
+  if (typeof candidate !== 'string') return false;
+
+  const expectedBuffer = Buffer.from(MEDIA_INTERNAL_TOKEN);
+  const candidateBuffer = Buffer.from(candidate);
+  return expectedBuffer.length === candidateBuffer.length
+    && timingSafeEqual(expectedBuffer, candidateBuffer);
 }
 
 // ─── Session validation ───────────────────────────────────────────────────────
@@ -144,6 +157,12 @@ async function validateSessionToken(token: string): Promise<string | null> {
  * Results are cached in-memory for 60 seconds to reduce load on the auth server.
  */
 export async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+  if (hasValidInternalToken(req)) {
+    req.userId = 'internal:media-migration';
+    next();
+    return;
+  }
+
   const token = extractToken(req);
 
   if (!token) {
