@@ -9,6 +9,7 @@ import type { MediaKind, MediaMetadata, MediaProfile, MediaResponse } from '../t
 
 const redis = createRedisConnection();
 const MEDIA_VARIANT_FILENAMES: Record<string, string> = {
+  image: 'image.webp',
   thumbnail: 'thumbnail.webp',
   display: 'display.webp',
   large: 'large.webp',
@@ -327,7 +328,7 @@ if meta.error then
   meta.status = 'failed'
 else
   local requiredByKind = {
-    image = meta.profile == 'display-only' and {'display'} or {'thumbnail', 'display', 'large', 'print'},
+    image = {'image'},
     video = {'hd', 'medium', 'low'},
     pdf = {'compressed'},
     excel = {'original'}
@@ -360,28 +361,28 @@ async function persistMediaMetadata(meta: MediaMetadata): Promise<void> {
   await redis.set(key(meta.id), JSON.stringify(meta));
 }
 
-export async function compactMediaForDisplay(id: string): Promise<boolean> {
+export async function compactMediaToCanonicalImage(id: string): Promise<boolean> {
   const raw = await redis.get(key(id));
   const meta = raw ? JSON.parse(raw) as MediaMetadata : await recoverMediaFromStorage(id);
   if (!meta || meta.kind !== 'image') return false;
 
   const files = await storage.listFiles(id);
-  const displayFilename = meta.variants['display'] ?? files.find((filename) => filename === 'display.webp');
-  if (!displayFilename || !(await storage.exists(id, displayFilename))) return false;
+  const canonicalFilename = 'image.webp';
+  if (!(await storage.exists(id, canonicalFilename))) return false;
 
   await Promise.all(
     files
-      .filter((filename) => filename !== displayFilename)
+      .filter((filename) => filename !== canonicalFilename)
       .map((filename) => storage.deleteFile(id, filename)),
   );
 
-  meta.profile = 'display-only';
+  meta.profile = 'standard';
   meta.status = 'completed';
-  meta.originalFilename = displayFilename;
+  meta.originalFilename = canonicalFilename;
   meta.originalMimeType = 'image/webp';
   meta.originalSizeBytes = 0;
-  meta.completedVariants = ['display'];
-  meta.variants = { display: displayFilename };
+  meta.completedVariants = ['image'];
+  meta.variants = { image: canonicalFilename };
   delete meta.error;
   meta.updatedAt = nowIso();
   await persistMediaMetadata(meta);
@@ -421,7 +422,7 @@ async function recoverMediaFromStorage(id: string): Promise<MediaMetadata | null
 }
 
 function inferKindFromFiles(files: string[]): MediaKind {
-  if (files.some((filename) => ['thumbnail.webp', 'display.webp', 'large.webp', 'print.jpg'].includes(filename))) {
+  if (files.some((filename) => ['image.webp', 'thumbnail.webp', 'display.webp', 'large.webp', 'print.jpg'].includes(filename))) {
     return 'image';
   }
 
@@ -477,6 +478,12 @@ function extractError(msg: string): string {
 // ─── Response builder ─────────────────────────────────────────────────────────
 
 function toResponse(meta: MediaMetadata): MediaResponse {
+  if (meta.kind === 'image' && meta.variants.image) {
+    const url = meta.slug
+      ? `/media/${meta.id}/${meta.slug}.webp`
+      : `/media/${meta.id}/image.webp`;
+    return { ...meta, url, variants: { image: url } };
+  }
   const variantUrls = Object.fromEntries(
     Object.entries(meta.variants).map(([variantName, filename]) => {
       const ext = path.extname(filename); // e.g. ".pdf", ".mp4", ".webp", ".xlsx"

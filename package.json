@@ -1,7 +1,7 @@
 {
   "name": "media-service",
   "version": "2.0.0",
-  "description": "Unified media processing API — images (Sharp/4 variants), video (FFmpeg/hd+medium+low), PDF (Ghostscript/compressed), Excel (pass-through) — BullMQ + Redis + MinIO",
+  "description": "Unified media processing API — images (one optimized WebP), video (FFmpeg/hd+medium+low), PDF (Ghostscript/compressed), Excel (pass-through) — BullMQ + Redis + MinIO",
   "main": "dist/api/server.js",
   "scripts": {
     "dev:api": "ts-node-dev --respawn --transpile-only src/api/server.ts",

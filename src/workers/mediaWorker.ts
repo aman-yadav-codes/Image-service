@@ -11,7 +11,7 @@ import { config } from '../config/index.js';
 import { storage } from '../storage/index.js';
 import { logger } from '../utils/logger.js';
 import { markMediaVariantCompleted, markMediaFailed } from '../services/mediaService.js';
-import type { MediaJobData, MediaProfile } from '../types/media.js';
+import type { MediaJobData } from '../types/media.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -19,62 +19,22 @@ async function run(command: string, args: string[]): Promise<void> {
   await execFileAsync(command, args, { maxBuffer: 1024 * 1024 * 16 });
 }
 
-// ─── Image processing via Sharp (4 variants) ──────────────────────────────────
+// ─── Image processing via Sharp (one canonical object) ────────────────────────
 
 async function processImage(
-  variant: string,
   inputBuffer: Buffer,
-  profile: MediaProfile = 'standard',
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const pipeline = sharp(inputBuffer, {
     failOn: 'error',
     limitInputPixels: config.image.maxImagePixels,
   });
 
-  let outputBuffer: Buffer;
-  let filename: string;
+  const outputBuffer = await pipeline
+    .resize(1920, undefined, { fit: 'inside', withoutEnlargement: true })
+    .webp({ quality: 82, effort: 5 })
+    .toBuffer();
 
-  switch (variant) {
-    case 'thumbnail':
-      outputBuffer = await pipeline
-        .resize(256, 256, { fit: 'cover', position: 'centre' })
-        .webp({ quality: 75 })
-        .toBuffer();
-      filename = 'thumbnail.webp';
-      break;
-
-    case 'display':
-      outputBuffer = await pipeline
-        .resize(profile === 'display-only' ? 1024 : 1280, undefined, {
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .webp({ quality: profile === 'display-only' ? 68 : 82, effort: 5 })
-        .toBuffer();
-      filename = 'display.webp';
-      break;
-
-    case 'large':
-      outputBuffer = await pipeline
-        .resize(1920, undefined, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 85 })
-        .toBuffer();
-      filename = 'large.webp';
-      break;
-
-    case 'print':
-      outputBuffer = await pipeline
-        .resize(3840, undefined, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 95 })
-        .toBuffer();
-      filename = 'print.jpg';
-      break;
-
-    default:
-      throw new Error(`Unknown image variant: ${variant}`);
-  }
-
-  return { buffer: outputBuffer, filename, contentType: variant === 'print' ? 'image/jpeg' : 'image/webp' };
+  return { buffer: outputBuffer, filename: 'image.webp', contentType: 'image/webp' };
 }
 
 // ─── Video processing via FFmpeg (3 variants) ────────────────────────────────
@@ -136,7 +96,7 @@ async function processPdf(input: string, output: string): Promise<void> {
 logger.info({ concurrency: config.media.workerConcurrency }, 'Media worker starting');
 
 const worker = new Worker<MediaJobData>('media-processing', async (job) => {
-  const { mediaId, kind, variant, originalFilename, originalMimeType, profile } = job.data;
+  const { mediaId, kind, variant, originalFilename, originalMimeType } = job.data;
   const log = logger.child({ mediaId, kind, variant, jobId: job.id });
 
   log.info('Media job started');
@@ -158,15 +118,13 @@ const worker = new Worker<MediaJobData>('media-processing', async (job) => {
 
     if (kind === 'image') {
       // ── Image: process entirely in memory via Sharp ───────────────────────
-      const { buffer: outBuf, filename, contentType } = await processImage(variant, buffer, profile);
+      const { buffer: outBuf, filename, contentType } = await processImage(buffer);
       await job.updateProgress(85);
       await storage.save(mediaId, filename, outBuf, contentType);
       await markMediaVariantCompleted(mediaId, variant, filename);
-      if (profile === 'display-only') {
-        await storage.deleteFile(mediaId, originalFilename).catch((err: unknown) => {
-          log.warn({ err, originalFilename }, 'Display-only original cleanup failed');
-        });
-      }
+      await storage.deleteFile(mediaId, originalFilename).catch((err: unknown) => {
+        log.warn({ err, originalFilename }, 'Image original cleanup failed');
+      });
       await job.updateProgress(100);
       log.info({ filename }, 'Image variant saved');
       return;

@@ -65,17 +65,18 @@ export async function handleMediaVariant(req: Request, res: Response, next: Next
   try {
     const { id } = req.params as { id: string };
     // Strip extension from variant name so both /compressed and /compressed.pdf work
-    const variant = (req.params.variant ?? '').replace(/\.[^.]+$/, '');
+    const requestedVariant = (req.params.variant ?? '').replace(/\.[^.]+$/, '');
 
     const meta = await getMediaStatus(id);
 
     if (meta.status === 'queued' || meta.status === 'processing') {
       throw AppError.notFound(
-        `Variant "${variant}" is not ready yet (status: ${meta.status}). ` +
+        `Media is not ready yet (status: ${meta.status}). ` +
         `Poll GET /media/${id} until status is "completed".`,
       );
     }
 
+    const variant = meta.kind === 'image' ? 'image' : requestedVariant;
     const filename = meta.variants[variant] as string | undefined;
     if (!filename) {
       const available = Object.keys(meta.variants).join(', ') || 'none yet';

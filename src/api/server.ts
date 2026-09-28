@@ -23,7 +23,7 @@ async function start(): Promise<void> {
       // Determine the storage filename based on kind + variant
       let filename: string;
       if (kind === 'image') {
-        filename = variant === 'print' ? 'print.jpg' : `${variant}.webp`;
+        filename = 'image.webp';
       } else if (kind === 'video') {
         filename = `${variant}.mp4`;
       } else if (kind === 'pdf') {
