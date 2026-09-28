@@ -8,6 +8,7 @@ import { errorHandler } from '../middleware/errorHandler.js';
 import { config } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { metricsMiddleware } from '../utils/metrics.js';
+import { hasValidInternalToken } from '../middleware/auth.js';
 
 export function createApp() {
   const app = express();
@@ -15,7 +16,7 @@ export function createApp() {
   const corsOptions: cors.CorsOptions = {
     origin: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Media-Internal-Token'],
     credentials: true,
   };
   app.use(cors(corsOptions));
@@ -42,6 +43,7 @@ export function createApp() {
     app.use(rateLimit({
       windowMs: config.api.rateLimitWindowMs,
       max: config.api.rateLimitMax,
+      skip: (req) => hasValidInternalToken(req),
       standardHeaders: true,
       legacyHeaders: false,
       message: {

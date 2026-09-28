@@ -64,7 +64,7 @@ function extractToken(req: Request): string | null {
   return null;
 }
 
-function hasValidInternalToken(req: Request): boolean {
+export function hasValidInternalToken(req: Request): boolean {
   if (!MEDIA_INTERNAL_TOKEN) return false;
   const candidate = req.headers['x-media-internal-token'];
   if (typeof candidate !== 'string') return false;
