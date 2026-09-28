@@ -11,7 +11,7 @@ import { config } from '../config/index.js';
 import { storage } from '../storage/index.js';
 import { logger } from '../utils/logger.js';
 import { markMediaVariantCompleted, markMediaFailed } from '../services/mediaService.js';
-import type { MediaJobData } from '../types/media.js';
+import type { MediaJobData, MediaProfile } from '../types/media.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,6 +24,7 @@ async function run(command: string, args: string[]): Promise<void> {
 async function processImage(
   variant: string,
   inputBuffer: Buffer,
+  profile: MediaProfile = 'standard',
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const pipeline = sharp(inputBuffer, {
     failOn: 'error',
@@ -44,8 +45,11 @@ async function processImage(
 
     case 'display':
       outputBuffer = await pipeline
-        .resize(1280, undefined, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 82 })
+        .resize(profile === 'display-only' ? 1024 : 1280, undefined, {
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({ quality: profile === 'display-only' ? 68 : 82, effort: 5 })
         .toBuffer();
       filename = 'display.webp';
       break;
@@ -154,7 +158,7 @@ const worker = new Worker<MediaJobData>('media-processing', async (job) => {
 
     if (kind === 'image') {
       // ── Image: process entirely in memory via Sharp ───────────────────────
-      const { buffer: outBuf, filename, contentType } = await processImage(variant, buffer);
+      const { buffer: outBuf, filename, contentType } = await processImage(variant, buffer, profile);
       await job.updateProgress(85);
       await storage.save(mediaId, filename, outBuf, contentType);
       await markMediaVariantCompleted(mediaId, variant, filename);
