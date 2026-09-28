@@ -132,7 +132,7 @@ async function processPdf(input: string, output: string): Promise<void> {
 logger.info({ concurrency: config.media.workerConcurrency }, 'Media worker starting');
 
 const worker = new Worker<MediaJobData>('media-processing', async (job) => {
-  const { mediaId, kind, variant, originalFilename, originalMimeType } = job.data;
+  const { mediaId, kind, variant, originalFilename, originalMimeType, profile } = job.data;
   const log = logger.child({ mediaId, kind, variant, jobId: job.id });
 
   log.info('Media job started');
@@ -158,6 +158,11 @@ const worker = new Worker<MediaJobData>('media-processing', async (job) => {
       await job.updateProgress(85);
       await storage.save(mediaId, filename, outBuf, contentType);
       await markMediaVariantCompleted(mediaId, variant, filename);
+      if (profile === 'display-only') {
+        await storage.deleteFile(mediaId, originalFilename).catch((err: unknown) => {
+          log.warn({ err, originalFilename }, 'Display-only original cleanup failed');
+        });
+      }
       await job.updateProgress(100);
       log.info({ filename }, 'Image variant saved');
       return;

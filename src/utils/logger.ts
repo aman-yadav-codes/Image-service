@@ -20,6 +20,10 @@ export const logger = pino(
       env: config.env,
     },
     timestamp: pino.stdTimeFunctions.isoTime,
+    redact: {
+      paths: ['req.headers.x-media-internal-token', 'headers.x-media-internal-token'],
+      censor: '[Redacted]',
+    },
     formatters: {
       level(label) {
         return { level: label };

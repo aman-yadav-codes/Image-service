@@ -103,6 +103,10 @@ export class MinIOStorage implements StorageProvider {
     return filenames.filter(Boolean).sort();
   }
 
+  async deleteFile(imageId: string, filename: string): Promise<void> {
+    await this.client.removeObject(this.bucket, this.objectKey(imageId, filename));
+  }
+
   async deleteFolder(imageId: string): Promise<void> {
     const prefix = `${imageId}/`;
     const keys: string[] = [];

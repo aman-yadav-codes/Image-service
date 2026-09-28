@@ -1,7 +1,7 @@
 import { Queue, QueueEvents } from 'bullmq';
 import { createRedisConnection } from '../config/redis.js';
 import { config } from '../config/index.js';
-import type { MediaJobData, MediaKind, MediaVariant } from '../types/media.js';
+import type { MediaJobData, MediaKind, MediaProfile, MediaVariant } from '../types/media.js';
 
 export const mediaQueue = new Queue<MediaJobData>('media-processing', {
   connection: createRedisConnection(),
@@ -24,7 +24,8 @@ export const mediaQueueEvents = new QueueEvents('media-processing', {
  *  - pdf    → 1 variant  (compressed) via Ghostscript
  *  - excel  → 1 variant  (original — stored as-is, no processing)
  */
-export function getVariantsForKind(kind: MediaKind): MediaVariant[] {
+export function getVariantsForKind(kind: MediaKind, profile: MediaProfile = 'standard'): MediaVariant[] {
+  if (kind === 'image' && profile === 'display-only') return ['display'];
   switch (kind) {
     case 'image': return ['thumbnail', 'display', 'large', 'print'];
     case 'video': return ['hd', 'medium', 'low'];
@@ -34,7 +35,7 @@ export function getVariantsForKind(kind: MediaKind): MediaVariant[] {
 }
 
 export async function enqueueMediaJobs(data: Omit<MediaJobData, 'variant'>): Promise<void> {
-  const variants = getVariantsForKind(data.kind);
+  const variants = getVariantsForKind(data.kind, data.profile);
   await mediaQueue.addBulk(
     variants.map((variant) => ({
       name: `process:${data.kind}:${variant}`,

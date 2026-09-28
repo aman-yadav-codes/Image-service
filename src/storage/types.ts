@@ -44,6 +44,9 @@ export interface StorageProvider {
    */
   listFiles(imageId: string): Promise<string[]>;
 
+  /** Delete one stored file without removing sibling variants. */
+  deleteFile(imageId: string, filename: string): Promise<void>;
+
   /**
    * Delete all files stored under the given imageId (the entire "folder").
    * Used when a media record is deleted — removes original + every variant.

@@ -77,6 +77,10 @@ export class LocalStorage implements StorageProvider {
     }
   }
 
+  async deleteFile(imageId: string, filename: string): Promise<void> {
+    await fs.promises.rm(this.objectPath(imageId, filename), { force: true });
+  }
+
   async deleteFolder(imageId: string): Promise<void> {
     const dir = path.join(this.basePath, imageId);
     try {

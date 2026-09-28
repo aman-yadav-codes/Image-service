@@ -1,4 +1,5 @@
 export type MediaKind = 'image' | 'video' | 'pdf' | 'excel';
+export type MediaProfile = 'standard' | 'display-only';
 
 // Image variants (4 variants via Sharp)
 export type ImageVariant = 'thumbnail' | 'display' | 'large' | 'print';
@@ -20,6 +21,7 @@ export interface MediaJobData {
   variant: MediaVariant;
   originalFilename: string;
   originalMimeType: string;
+  profile?: MediaProfile;
 }
 
 export type MediaStatus = 'queued' | 'processing' | 'completed' | 'failed';
@@ -35,6 +37,7 @@ export interface MediaMetadata {
   updatedAt: string;
   completedVariants: MediaVariant[];
   variants: Record<string, string>;
+  profile?: MediaProfile;
   /**
    * Optional SEO-friendly slug supplied at upload time via the `name` form field.
    * When set, variant URLs become: /media/:id/:variant/{slug}.{ext}

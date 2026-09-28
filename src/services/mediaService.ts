@@ -5,7 +5,7 @@ import { enqueueMediaJobs, getVariantsForKind } from '../queues/mediaQueue.js';
 import { createRedisConnection } from '../config/redis.js';
 import { AppError } from '../utils/errors.js';
 import { nowIso } from '../utils/helpers.js';
-import type { MediaKind, MediaMetadata, MediaResponse } from '../types/media.js';
+import type { MediaKind, MediaMetadata, MediaProfile, MediaResponse } from '../types/media.js';
 
 const redis = createRedisConnection();
 const MEDIA_VARIANT_FILENAMES: Record<string, string> = {
@@ -60,6 +60,7 @@ export interface MediaUploadInput {
   size: number;
   /** Optional SEO-friendly name. Slugified and used in variant URLs. */
   name?: string;
+  profile?: MediaProfile;
 }
 
 /** Convert any string to a URL-safe slug: "My Product!" → "my-product" */
@@ -80,6 +81,7 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
   const originalFilename = `original${ext}`;
   const slug = input.name ? slugify(input.name) : undefined;
   const now = nowIso();
+  const profile = kind === 'image' ? (input.profile ?? 'standard') : 'standard';
 
   const metadata: MediaMetadata = {
     id,
@@ -92,6 +94,7 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
     updatedAt: now,
     completedVariants: [],
     variants: {},
+    profile,
     ...(slug ? { slug } : {}),
   };
 
@@ -110,7 +113,7 @@ export async function uploadMedia(input: MediaUploadInput): Promise<MediaRespons
 
   // Enqueue processing jobs (excel will enqueue an "original" job that's a no-op)
   if (kind !== 'excel') {
-    await enqueueMediaJobs({ mediaId: id, kind, originalFilename, originalMimeType: input.mimetype });
+    await enqueueMediaJobs({ mediaId: id, kind, originalFilename, originalMimeType: input.mimetype, profile });
   }
 
   return toResponse(metadata);
@@ -324,7 +327,7 @@ if meta.error then
   meta.status = 'failed'
 else
   local requiredByKind = {
-    image = {'thumbnail', 'display', 'large', 'print'},
+    image = meta.profile == 'display-only' and {'display'} or {'thumbnail', 'display', 'large', 'print'},
     video = {'hd', 'medium', 'low'},
     pdf = {'compressed'},
     excel = {'original'}
@@ -355,6 +358,34 @@ return 1
 
 async function persistMediaMetadata(meta: MediaMetadata): Promise<void> {
   await redis.set(key(meta.id), JSON.stringify(meta));
+}
+
+export async function compactMediaForDisplay(id: string): Promise<boolean> {
+  const raw = await redis.get(key(id));
+  const meta = raw ? JSON.parse(raw) as MediaMetadata : await recoverMediaFromStorage(id);
+  if (!meta || meta.kind !== 'image') return false;
+
+  const files = await storage.listFiles(id);
+  const displayFilename = meta.variants['display'] ?? files.find((filename) => filename === 'display.webp');
+  if (!displayFilename || !(await storage.exists(id, displayFilename))) return false;
+
+  await Promise.all(
+    files
+      .filter((filename) => filename !== displayFilename)
+      .map((filename) => storage.deleteFile(id, filename)),
+  );
+
+  meta.profile = 'display-only';
+  meta.status = 'completed';
+  meta.originalFilename = displayFilename;
+  meta.originalMimeType = 'image/webp';
+  meta.originalSizeBytes = 0;
+  meta.completedVariants = ['display'];
+  meta.variants = { display: displayFilename };
+  delete meta.error;
+  meta.updatedAt = nowIso();
+  await persistMediaMetadata(meta);
+  return true;
 }
 
 async function recoverMediaFromStorage(id: string): Promise<MediaMetadata | null> {

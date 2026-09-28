@@ -37,6 +37,9 @@ export async function handleMediaUpload(req: Request, res: Response, next: NextF
       size:         req.file.size,
       // Optional SEO name from multipart form field `name`
       name:         typeof req.body?.name === 'string' ? req.body.name : undefined,
+      profile:      req.userId === 'internal:media-migration' && req.body?.profile === 'display-only'
+        ? 'display-only'
+        : 'standard',
     });
 
     res.status(202).json(result);
