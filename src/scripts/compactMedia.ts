@@ -32,8 +32,14 @@ async function convertToCanonicalImage(id: string): Promise<{ before: number; af
         failOn: 'error',
         limitInputPixels: config.image.maxImagePixels,
       })
-        .resize(1920, undefined, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 82, effort: 5 })
+        .rotate()
+        .resize(config.image.maxWidth, undefined, { fit: 'inside', withoutEnlargement: true })
+        .webp({
+          quality: config.image.webpQuality,
+          effort: config.image.webpEffort,
+          smartSubsample: true,
+          alphaQuality: config.image.webpQuality,
+        })
         .toBuffer();
 
   if (source !== 'image.webp') {

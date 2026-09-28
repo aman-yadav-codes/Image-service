@@ -30,8 +30,14 @@ async function processImage(
   });
 
   const outputBuffer = await pipeline
-    .resize(1920, undefined, { fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 82, effort: 5 })
+    .rotate()
+    .resize(config.image.maxWidth, undefined, { fit: 'inside', withoutEnlargement: true })
+    .webp({
+      quality: config.image.webpQuality,
+      effort: config.image.webpEffort,
+      smartSubsample: true,
+      alphaQuality: config.image.webpQuality,
+    })
     .toBuffer();
 
   return { buffer: outputBuffer, filename: 'image.webp', contentType: 'image/webp' };

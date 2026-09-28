@@ -21,7 +21,13 @@ export const config = {
   storage: { driver: optional('STORAGE_DRIVER', 'local') as 'local' | 'minio' | 's3', localBasePath: optional('STORAGE_LOCAL_PATH', path.join(process.cwd(), 'storage')) },
   minio: { endpoint: optional('MINIO_ENDPOINT', 'localhost'), port: optionalNumber('MINIO_PORT', 9000), useSSL: optional('MINIO_USE_SSL', 'false') === 'true', accessKey: optional('MINIO_ACCESS_KEY', 'minioadmin'), secretKey: optional('MINIO_SECRET_KEY', 'minioadmin123'), bucket: optional('MINIO_BUCKET', 'media'), region: optional('MINIO_REGION', 'us-east-1'), publicEndpoint: optional('MINIO_PUBLIC_ENDPOINT', 'http://localhost:9000') },
   queue: { maxRetries: optionalNumber('JOB_MAX_RETRIES', 3), backoffDelay: optionalNumber('JOB_BACKOFF_DELAY_MS', 2_000), keepCompletedMs: optionalNumber('JOB_KEEP_COMPLETED_MS', 3_600_000), keepFailedMs: optionalNumber('JOB_KEEP_FAILED_MS', 86_400_000) },
-  image: { maxImagePixels: optionalNumber('MAX_IMAGE_PIXELS', 40000000), maxMetadataSize: optionalNumber('MAX_METADATA_SIZE', 1048576) },
+  image: {
+    maxImagePixels: optionalNumber('MAX_IMAGE_PIXELS', 40000000),
+    maxMetadataSize: optionalNumber('MAX_METADATA_SIZE', 1048576),
+    maxWidth: optionalNumber('IMAGE_MAX_WIDTH', 1920),
+    webpQuality: optionalNumber('IMAGE_WEBP_QUALITY', 70),
+    webpEffort: optionalNumber('IMAGE_WEBP_EFFORT', 6),
+  },
   media: {
     maxFileSizeBytes: optionalNumber('MEDIA_MAX_FILE_SIZE_BYTES', 500 * 1024 * 1024),
     allowedMimeTypes: optional('MEDIA_ALLOWED_MIME_TYPES', 'image/jpeg,image/png,image/webp,image/gif,image/tiff,image/avif,video/mp4,video/webm,video/quicktime,video/x-matroska,video/mpeg,video/avi,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv').split(','),
