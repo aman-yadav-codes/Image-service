@@ -27,6 +27,7 @@ export const config = {
     maxWidth: optionalNumber('IMAGE_MAX_WIDTH', 1920),
     webpQuality: optionalNumber('IMAGE_WEBP_QUALITY', 96),
     webpEffort: optionalNumber('IMAGE_WEBP_EFFORT', 6),
+    preferredMinBytes: optionalNumber('IMAGE_PREFERRED_MIN_BYTES', 50 * 1024),
     maxBytes: optionalNumber('IMAGE_MAX_BYTES', 70 * 1024),
   },
   media: {

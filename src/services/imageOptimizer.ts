@@ -37,6 +37,7 @@ function compressionSteps(): CompressionStep[] {
 
 export async function optimizeImage(inputBuffer: Buffer): Promise<Buffer> {
   let smallest: Buffer | undefined;
+  let highestDetailUnderMax: Buffer | undefined;
 
   for (const step of compressionSteps()) {
     const output = await sharp(inputBuffer, {
@@ -45,6 +46,7 @@ export async function optimizeImage(inputBuffer: Buffer): Promise<Buffer> {
     })
       .rotate()
       .resize(step.width, undefined, { fit: 'inside', withoutEnlargement: true })
+      .withIccProfile('srgb')
       .webp({
         quality: step.quality,
         effort: config.image.webpEffort,
@@ -54,7 +56,33 @@ export async function optimizeImage(inputBuffer: Buffer): Promise<Buffer> {
       .toBuffer();
 
     if (!smallest || output.length < smallest.length) smallest = output;
-    if (output.length <= config.image.maxBytes) return output;
+    if (output.length <= config.image.maxBytes) {
+      highestDetailUnderMax = output;
+      if (output.length >= config.image.preferredMinBytes) return output;
+      break;
+    }
+  }
+
+  if (highestDetailUnderMax) {
+    for (const quality of [100, 70, 50]) {
+      const output = await sharp(inputBuffer, {
+        failOn: 'error',
+        limitInputPixels: config.image.maxImagePixels,
+      })
+        .rotate()
+        .resize(config.image.maxWidth, undefined, { fit: 'inside', withoutEnlargement: true })
+        .withIccProfile('srgb')
+        .webp({
+          quality,
+          effort: config.image.webpEffort,
+          nearLossless: true,
+          alphaQuality: quality,
+        })
+        .toBuffer();
+
+      if (!smallest || output.length < smallest.length) smallest = output;
+      if (output.length <= config.image.maxBytes) return output;
+    }
   }
 
   if (smallest && smallest.length <= config.image.maxBytes) return smallest;
