@@ -6,14 +6,17 @@ type CompressionStep = { width: number; quality: number };
 function compressionSteps(): CompressionStep[] {
   const candidates = [
     [config.image.maxWidth, config.image.webpQuality],
+    [config.image.maxWidth, config.image.webpQuality - 6],
     [1600, config.image.webpQuality - 4],
-    [1280, config.image.webpQuality - 8],
-    [1024, config.image.webpQuality - 12],
-    [896, config.image.webpQuality - 16],
-    [768, config.image.webpQuality - 20],
-    [640, config.image.webpQuality - 26],
-    [512, config.image.webpQuality - 32],
-    [384, config.image.webpQuality - 38],
+    [1600, config.image.webpQuality - 10],
+    [1440, config.image.webpQuality - 8],
+    [1280, config.image.webpQuality - 12],
+    [1024, config.image.webpQuality - 18],
+    [896, config.image.webpQuality - 24],
+    [768, config.image.webpQuality - 30],
+    [640, config.image.webpQuality - 36],
+    [512, config.image.webpQuality - 42],
+    [384, config.image.webpQuality - 48],
     [256, 20],
   ] as const;
   const seen = new Set<string>();
@@ -50,7 +53,7 @@ export async function optimizeImage(inputBuffer: Buffer): Promise<Buffer> {
       .toBuffer();
 
     if (!smallest || output.length < smallest.length) smallest = output;
-    if (output.length <= config.image.targetBytes) return output;
+    if (output.length <= config.image.maxBytes) return output;
   }
 
   if (smallest && smallest.length <= config.image.maxBytes) return smallest;
