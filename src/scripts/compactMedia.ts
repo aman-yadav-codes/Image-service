@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import { promises as fs } from 'node:fs';
-import sharp from 'sharp';
-import { config } from '../config/index.js';
 import { compactMediaToCanonicalImage } from '../services/mediaService.js';
+import { optimizeImage } from '../services/imageOptimizer.js';
 import { storage } from '../storage/index.js';
 
 const IMAGE_EXTENSIONS = new Set(['.avif', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp']);
@@ -28,19 +27,7 @@ async function convertToCanonicalImage(id: string): Promise<{ before: number; af
   const input = await storage.readFile(id, source);
   const output = source === 'image.webp'
     ? input
-    : await sharp(input, {
-        failOn: 'error',
-        limitInputPixels: config.image.maxImagePixels,
-      })
-        .rotate()
-        .resize(config.image.maxWidth, undefined, { fit: 'inside', withoutEnlargement: true })
-        .webp({
-          quality: config.image.webpQuality,
-          effort: config.image.webpEffort,
-          smartSubsample: true,
-          alphaQuality: config.image.webpQuality,
-        })
-        .toBuffer();
+    : await optimizeImage(input);
 
   if (source !== 'image.webp') {
     await storage.save(id, 'image.webp', output, 'image/webp');

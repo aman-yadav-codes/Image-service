@@ -5,12 +5,12 @@ import { promisify } from 'util';
 import { promises as fs } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import sharp from 'sharp';
 import { createRedisConnection } from '../config/redis.js';
 import { config } from '../config/index.js';
 import { storage } from '../storage/index.js';
 import { logger } from '../utils/logger.js';
 import { markMediaVariantCompleted, markMediaFailed } from '../services/mediaService.js';
+import { optimizeImage } from '../services/imageOptimizer.js';
 import type { MediaJobData } from '../types/media.js';
 
 const execFileAsync = promisify(execFile);
@@ -24,21 +24,7 @@ async function run(command: string, args: string[]): Promise<void> {
 async function processImage(
   inputBuffer: Buffer,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
-  const pipeline = sharp(inputBuffer, {
-    failOn: 'error',
-    limitInputPixels: config.image.maxImagePixels,
-  });
-
-  const outputBuffer = await pipeline
-    .rotate()
-    .resize(config.image.maxWidth, undefined, { fit: 'inside', withoutEnlargement: true })
-    .webp({
-      quality: config.image.webpQuality,
-      effort: config.image.webpEffort,
-      smartSubsample: true,
-      alphaQuality: config.image.webpQuality,
-    })
-    .toBuffer();
+  const outputBuffer = await optimizeImage(inputBuffer);
 
   return { buffer: outputBuffer, filename: 'image.webp', contentType: 'image/webp' };
 }
