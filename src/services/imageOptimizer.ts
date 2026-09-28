@@ -5,6 +5,7 @@ type CompressionStep = { width: number; quality: number };
 
 function compressionSteps(): CompressionStep[] {
   const candidates = [
+    [config.image.maxWidth, config.image.webpQuality + 4],
     [config.image.maxWidth, config.image.webpQuality],
     [config.image.maxWidth, config.image.webpQuality - 6],
     [1600, config.image.webpQuality - 4],

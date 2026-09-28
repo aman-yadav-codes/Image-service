@@ -25,7 +25,7 @@ export const config = {
     maxImagePixels: optionalNumber('MAX_IMAGE_PIXELS', 40000000),
     maxMetadataSize: optionalNumber('MAX_METADATA_SIZE', 1048576),
     maxWidth: optionalNumber('IMAGE_MAX_WIDTH', 1920),
-    webpQuality: optionalNumber('IMAGE_WEBP_QUALITY', 88),
+    webpQuality: optionalNumber('IMAGE_WEBP_QUALITY', 96),
     webpEffort: optionalNumber('IMAGE_WEBP_EFFORT', 6),
     maxBytes: optionalNumber('IMAGE_MAX_BYTES', 70 * 1024),
   },
