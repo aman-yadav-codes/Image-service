@@ -19,21 +19,20 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS production
 
 # All processing toolchain:
-#   Sharp (images)    → vips-dev + fftw-dev + build-base + python3
-#   FFmpeg (video)    → ffmpeg
-#   Ghostscript (pdf) → ghostscript
+#   Python compressor (images) → python3 + py3-pillow
+#   FFmpeg (video)             → ffmpeg
+#   Ghostscript (pdf)          → ghostscript
 # Excel files are stored as-is — no extra tools needed
 RUN apk add --no-cache \
-    vips-dev \
-    fftw-dev \
-    build-base \
     python3 \
+    py3-pillow \
     ffmpeg \
     ghostscript
 
 WORKDIR /app
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src/scripts ./src/scripts
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 

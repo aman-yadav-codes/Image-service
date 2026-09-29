@@ -173,23 +173,18 @@ GET http://YOUR_SERVER_IP:4001/media/<id>
   "id": "media_...",
   "kind": "image",
   "status": "completed",
+  "url": "/media/media_.../image.webp",
   "variants": {
-    "thumbnail": "/media/media_.../thumbnail.webp",
-    "display":   "/media/media_.../display.webp",
-    "large":     "/media/media_.../large.webp",
-    "print":     "/media/media_.../print.jpg"
+    "image": "/media/media_.../image.webp"
   }
 }
 ```
 
 ### Image Variants
 
-| Variant | Output | Quality | Notes |
-|---|---|---|---|
-| `thumbnail` | 256×256 WebP | 75 | Cover crop, smart focus |
-| `display` | 1280px WebP | 82 | Preserves aspect ratio |
-| `large` | 1920px WebP | 85 | High-res variant |
-| `print` | Full res PNG | 95 | Lossless, for downloads |
+| Variant | Output | Notes |
+|---|---|---|
+| `image` | WebP | Python compressor, same pixel dimensions as the uploaded source, target-size quality search when possible |
 
 ---
 
@@ -266,7 +261,9 @@ MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker  # scale workers
 | `MINIO_BUCKET` | `media` | Storage bucket name |
 | `MINIO_PUBLIC_ENDPOINT` | — | Browser-accessible MinIO URL |
 | `MEDIA_MAX_FILE_SIZE_BYTES` | `524288000` | Upload limit (500 MB) |
-| `WORKER_CONCURRENCY` | `2` | Jobs per worker process |
+| `MEDIA_WORKER_CONCURRENCY` | `2` | Jobs per worker process |
+| `IMAGE_COMPRESSOR_ENGINE` | `pillow` | Image compressor engine; use `pillow` for VPS independence from libvips/sharp |
+| `IMAGE_COMPRESSOR_ALLOW_RESIZE` | `false` | Keep original dimensions; do not auto-downscale during compression |
 | `JOB_MAX_RETRIES` | `3` | Max retry attempts |
 | `WORKER_CPU_LIMIT` | `1.0` | CPU limit per worker container |
 | `WORKER_MEMORY_LIMIT` | `512M` | Memory limit per worker container |

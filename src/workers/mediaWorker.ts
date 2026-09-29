@@ -19,7 +19,7 @@ async function run(command: string, args: string[]): Promise<void> {
   await execFileAsync(command, args, { maxBuffer: 1024 * 1024 * 16 });
 }
 
-// ─── Image processing via Sharp (one canonical object) ────────────────────────
+// ─── Image processing via Python compressor (one canonical object) ────────────
 
 async function processImage(
   inputBuffer: Buffer,
@@ -109,7 +109,7 @@ const worker = new Worker<MediaJobData>('media-processing', async (job) => {
     await job.updateProgress(20);
 
     if (kind === 'image') {
-      // ── Image: process entirely in memory via Sharp ───────────────────────
+      // ── Image: write temp file, compress through Python, save canonical WebP
       const { buffer: outBuf, filename, contentType } = await processImage(buffer);
       await job.updateProgress(85);
       await storage.save(mediaId, filename, outBuf, contentType);

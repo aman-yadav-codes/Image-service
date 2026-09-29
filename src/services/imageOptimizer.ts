@@ -1,90 +1,54 @@
-import sharp from 'sharp';
+import { execFile } from 'child_process';
+import { promises as fs } from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { promisify } from 'util';
 import { config } from '../config/index.js';
 
-type CompressionStep = { width: number; quality: number };
+const execFileAsync = promisify(execFile);
 
-function compressionSteps(): CompressionStep[] {
-  const candidates = [
-    [config.image.maxWidth, config.image.webpQuality + 4],
-    [config.image.maxWidth, config.image.webpQuality],
-    [config.image.maxWidth, config.image.webpQuality - 6],
-    [1600, config.image.webpQuality - 4],
-    [1600, config.image.webpQuality - 10],
-    [1440, config.image.webpQuality - 8],
-    [1280, config.image.webpQuality - 12],
-    [1024, config.image.webpQuality - 18],
-    [896, config.image.webpQuality - 24],
-    [768, config.image.webpQuality - 30],
-    [640, config.image.webpQuality - 36],
-    [512, config.image.webpQuality - 42],
-    [384, config.image.webpQuality - 48],
-    [256, 20],
-  ] as const;
-  const seen = new Set<string>();
+function targetKb(): string {
+  return Math.max(1, Math.floor(config.image.maxBytes / 1024)).toString();
+}
 
-  return candidates
-    .map(([width, quality]) => ({
-      width: Math.min(width, config.image.maxWidth),
-      quality: Math.max(20, Math.min(quality, 100)),
-    }))
-    .filter((step) => {
-      const key = `${step.width}:${step.quality}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+async function runCompressor(inputPath: string, outputPath: string): Promise<void> {
+  const args = [
+    config.image.compressorScript,
+    inputPath,
+    '--output',
+    outputPath,
+    '--target',
+    targetKb(),
+    '--effort',
+    String(config.image.webpEffort),
+    '--engine',
+    config.image.compressorEngine,
+    '--max-pixels',
+    String(config.image.maxImagePixels),
+  ];
+
+  if (!config.image.allowResize) args.push('--no-resize');
+
+  await execFileAsync(config.image.pythonBinary, args, {
+    maxBuffer: 1024 * 1024 * 16,
+    timeout: config.image.compressorTimeoutMs,
+    env: {
+      ...process.env,
+      PYTHONUNBUFFERED: '1',
+    },
+  });
 }
 
 export async function optimizeImage(inputBuffer: Buffer): Promise<Buffer> {
-  let smallest: Buffer | undefined;
-  let highestDetailUnderMax: Buffer | undefined;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'image-compress-'));
+  const inputPath = path.join(tempDir, 'source');
+  const outputPath = path.join(tempDir, 'image.webp');
 
-  for (const step of compressionSteps()) {
-    const output = await sharp(inputBuffer, {
-      failOn: 'error',
-      limitInputPixels: config.image.maxImagePixels,
-    })
-      .rotate()
-      .resize(step.width, undefined, { fit: 'inside', withoutEnlargement: true })
-      .withIccProfile('srgb')
-      .webp({
-        quality: step.quality,
-        effort: config.image.webpEffort,
-        smartSubsample: true,
-        alphaQuality: step.quality,
-      })
-      .toBuffer();
-
-    if (!smallest || output.length < smallest.length) smallest = output;
-    if (output.length <= config.image.maxBytes) {
-      highestDetailUnderMax = output;
-      if (output.length >= config.image.preferredMinBytes) return output;
-      break;
-    }
+  try {
+    await fs.writeFile(inputPath, inputBuffer);
+    await runCompressor(inputPath, outputPath);
+    return await fs.readFile(outputPath);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
   }
-
-  if (highestDetailUnderMax) {
-    for (const quality of [100, 70, 50]) {
-      const output = await sharp(inputBuffer, {
-        failOn: 'error',
-        limitInputPixels: config.image.maxImagePixels,
-      })
-        .rotate()
-        .resize(config.image.maxWidth, undefined, { fit: 'inside', withoutEnlargement: true })
-        .withIccProfile('srgb')
-        .webp({
-          quality,
-          effort: config.image.webpEffort,
-          nearLossless: true,
-          alphaQuality: quality,
-        })
-        .toBuffer();
-
-      if (!smallest || output.length < smallest.length) smallest = output;
-      if (output.length <= config.image.maxBytes) return output;
-    }
-  }
-
-  if (smallest && smallest.length <= config.image.maxBytes) return smallest;
-  throw new Error(`Unable to compress image below ${config.image.maxBytes} bytes`);
 }

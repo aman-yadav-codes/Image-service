@@ -1,12 +1,22 @@
 import * as path from 'path';
+import { existsSync } from 'fs';
 
 function required(key: string): string { const val = process.env[key]; if (!val) throw new Error(`Missing required environment variable: ${key}`); return val; }
 function optional(key: string, fallback: string): string { return process.env[key] ?? fallback; }
 function optionalNumber(key: string, fallback: number): number { const val = process.env[key]; return val ? parseInt(val, 10) : fallback; }
+function optionalIntRange(key: string, fallback: number, min: number, max: number): number {
+  const value = optionalNumber(key, fallback);
+  return Math.max(min, Math.min(value, max));
+}
 function optionalBoolean(key: string, fallback: boolean): boolean {
   const val = process.env[key];
   if (val === undefined) return fallback;
   return ['1', 'true', 'yes', 'on'].includes(val.trim().toLowerCase());
+}
+function defaultCompressorScript(): string {
+  const distPath = path.resolve(process.cwd(), 'dist/scripts/image-compressor.py');
+  if (existsSync(distPath)) return distPath;
+  return path.resolve(process.cwd(), 'src/scripts/image-compressor.py');
 }
 
 export const config = {
@@ -26,9 +36,14 @@ export const config = {
     maxMetadataSize: optionalNumber('MAX_METADATA_SIZE', 1048576),
     maxWidth: optionalNumber('IMAGE_MAX_WIDTH', 1920),
     webpQuality: optionalNumber('IMAGE_WEBP_QUALITY', 96),
-    webpEffort: optionalNumber('IMAGE_WEBP_EFFORT', 6),
+    webpEffort: optionalIntRange('IMAGE_WEBP_EFFORT', 6, 0, 6),
     preferredMinBytes: optionalNumber('IMAGE_PREFERRED_MIN_BYTES', 50 * 1024),
     maxBytes: optionalNumber('IMAGE_MAX_BYTES', 70 * 1024),
+    pythonBinary: optional('IMAGE_COMPRESSOR_PYTHON', process.platform === 'win32' ? 'python' : 'python3'),
+    compressorScript: optional('IMAGE_COMPRESSOR_SCRIPT', defaultCompressorScript()),
+    compressorEngine: optional('IMAGE_COMPRESSOR_ENGINE', 'auto') as 'auto' | 'pyvips' | 'pillow',
+    compressorTimeoutMs: optionalNumber('IMAGE_COMPRESSOR_TIMEOUT_MS', 120_000),
+    allowResize: optionalBoolean('IMAGE_COMPRESSOR_ALLOW_RESIZE', false),
   },
   media: {
     maxFileSizeBytes: optionalNumber('MEDIA_MAX_FILE_SIZE_BYTES', 500 * 1024 * 1024),

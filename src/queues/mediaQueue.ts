@@ -19,7 +19,7 @@ export const mediaQueueEvents = new QueueEvents('media-processing', {
 
 /**
  * Returns the list of variants to process for each media kind.
- *  - image  → 1 canonical optimised image via Sharp
+ *  - image  → 1 canonical optimized image via the Python compressor
  *  - video  → 3 variants (hd/720p, medium/480p, low/360p) via FFmpeg
  *  - pdf    → 1 variant  (compressed) via Ghostscript
  *  - excel  → 1 variant  (original — stored as-is, no processing)
