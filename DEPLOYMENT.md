@@ -264,8 +264,9 @@ MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker  # scale workers
 | `MEDIA_WORKER_REPLICAS` | `4` | Worker containers for high-throughput bulk imports |
 | `MEDIA_WORKER_CONCURRENCY` | `1` | CPU-bound Python jobs per worker process |
 | `IMAGE_WEBP_EFFORT` | `4` | WebP encoding effort; bulk-import default balances speed and output size |
-| `IMAGE_COMPRESSOR_ENGINE` | `pillow` | Image compressor engine; use `pillow` for VPS independence from libvips/sharp |
+| `IMAGE_COMPRESSOR_ENGINE` | `pyvips` | High-throughput Python/libvips engine; the service does not use Sharp |
 | `IMAGE_COMPRESSOR_ALLOW_RESIZE` | `false` | Keep original dimensions; do not auto-downscale during compression |
+| `VIPS_CONCURRENCY` | `1` | libvips threads per worker; replicas provide process-level parallelism |
 | `JOB_MAX_RETRIES` | `3` | Max retry attempts |
 | `MEDIA_WORKER_CPU_LIMIT` | `0.75` | CPU limit per worker container |
 | `MEDIA_WORKER_MEMORY_LIMIT` | `1G` | Memory limit per worker container |

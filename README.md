@@ -55,7 +55,7 @@ Excel files are stored as `original` and marked complete immediately.
 
 ## Scaling
 
-Workers share one BullMQ queue, so concurrent uploads are automatically distributed across idle worker containers. The bulk-import defaults run four replicas with one job per replica and a `0.75` CPU limit each. Pillow WebP effort defaults to `4`, which provides substantially faster encoding than effort `6` while preserving the original pixel dimensions.
+Workers share one BullMQ queue, so concurrent uploads are automatically distributed across idle worker containers. The bulk-import defaults run four replicas with one job per replica and a `0.75` CPU limit each. The Python compressor uses its pyvips engine with one libvips thread per container and WebP effort `4`, preserving the original pixel dimensions without any Sharp dependency.
 
 ```bash
 docker compose up -d --build

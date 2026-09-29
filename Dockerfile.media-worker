@@ -19,15 +19,20 @@ RUN npm prune --omit=dev
 FROM node:20-alpine AS production
 
 # All processing toolchain:
-#   Python compressor (images) → python3 + py3-pillow
+#   Python compressor (images) -> pyvips/libvips with Pillow fallback
 #   FFmpeg (video)             → ffmpeg
 #   Ghostscript (pdf)          → ghostscript
 # Excel files are stored as-is — no extra tools needed
 RUN apk add --no-cache \
     python3 \
     py3-pillow \
+    py3-pip \
+    py3-cffi \
+    vips \
     ffmpeg \
     ghostscript
+
+RUN pip3 install --break-system-packages --no-cache-dir --no-deps pyvips==3.0.0
 
 WORKDIR /app
 
