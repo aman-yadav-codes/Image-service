@@ -7,18 +7,18 @@ import { config } from '../config/index.js';
 
 const execFileAsync = promisify(execFile);
 
-function targetKb(): string {
-  return Math.max(1, Math.floor(config.image.maxBytes / 1024)).toString();
+function targetKb(targetBytes: number): string {
+  return Math.max(1, Math.floor(targetBytes / 1024)).toString();
 }
 
-async function runCompressor(inputPath: string, outputPath: string): Promise<void> {
+async function runCompressor(inputPath: string, outputPath: string, targetBytes: number): Promise<void> {
   const args = [
     config.image.compressorScript,
     inputPath,
     '--output',
     outputPath,
     '--target',
-    targetKb(),
+    targetKb(targetBytes),
     '--effort',
     String(config.image.webpEffort),
     '--engine',
@@ -39,14 +39,14 @@ async function runCompressor(inputPath: string, outputPath: string): Promise<voi
   });
 }
 
-export async function optimizeImage(inputBuffer: Buffer): Promise<Buffer> {
+export async function optimizeImage(inputBuffer: Buffer, targetBytes: number): Promise<Buffer> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'image-compress-'));
   const inputPath = path.join(tempDir, 'source');
   const outputPath = path.join(tempDir, 'image.webp');
 
   try {
     await fs.writeFile(inputPath, inputBuffer);
-    await runCompressor(inputPath, outputPath);
+    await runCompressor(inputPath, outputPath, targetBytes);
     return await fs.readFile(outputPath);
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });

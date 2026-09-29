@@ -10,6 +10,7 @@ import type { MediaKind, MediaMetadata, MediaProfile, MediaResponse } from '../t
 const redis = createRedisConnection();
 const MEDIA_VARIANT_FILENAMES: Record<string, string> = {
   image: 'image.webp',
+  banner: 'banner.webp',
   thumbnail: 'thumbnail.webp',
   display: 'display.webp',
   large: 'large.webp',
@@ -328,7 +329,7 @@ if meta.error then
   meta.status = 'failed'
 else
   local requiredByKind = {
-    image = {'image'},
+    image = {'banner', 'thumbnail'},
     video = {'hd', 'medium', 'low'},
     pdf = {'compressed'},
     excel = {'original'}
@@ -403,7 +404,10 @@ async function recoverMediaFromStorage(id: string): Promise<MediaMetadata | null
   const kind = inferKindFromFiles(files);
   const now = nowIso();
 
-  if (kind === 'excel' && originalFilename) {
+  if (kind === 'image' && originalFilename && Object.keys(variants).length === 0) {
+    variants.banner = originalFilename;
+    variants.thumbnail = originalFilename;
+  } else if (kind === 'excel' && originalFilename) {
     variants.original = originalFilename;
   }
 
@@ -422,7 +426,10 @@ async function recoverMediaFromStorage(id: string): Promise<MediaMetadata | null
 }
 
 function inferKindFromFiles(files: string[]): MediaKind {
-  if (files.some((filename) => ['image.webp', 'thumbnail.webp', 'display.webp', 'large.webp', 'print.jpg'].includes(filename))) {
+  if (files.some((filename) =>
+    ['image.webp', 'banner.webp', 'thumbnail.webp', 'display.webp', 'large.webp', 'print.jpg'].includes(filename) ||
+    /\.(?:avif|gif|jpe?g|png|tiff?|webp)$/i.test(filename),
+  )) {
     return 'image';
   }
 
@@ -478,7 +485,7 @@ function extractError(msg: string): string {
 // ─── Response builder ─────────────────────────────────────────────────────────
 
 function toResponse(meta: MediaMetadata): MediaResponse {
-  if (meta.kind === 'image' && meta.variants.image) {
+  if (meta.kind === 'image' && meta.variants.image && !meta.variants.banner) {
     const ext = path.extname(meta.variants.image) || '.webp';
     const url = meta.slug
       ? `/media/${meta.id}/${meta.slug}${ext}`
@@ -504,7 +511,10 @@ function toResponse(meta: MediaMetadata): MediaResponse {
     }),
   );
 
-  return { ...meta, variants: variantUrls };
+  const url = meta.kind === 'image'
+    ? variantUrls.banner ?? variantUrls.image ?? variantUrls.thumbnail
+    : meta.url;
+  return { ...meta, ...(url ? { url } : {}), variants: variantUrls };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

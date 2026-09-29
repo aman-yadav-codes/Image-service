@@ -1,8 +1,8 @@
 export type MediaKind = 'image' | 'video' | 'pdf' | 'excel';
 export type MediaProfile = 'standard' | 'display-only';
 
-// Images have one canonical optimized object; Cloudflare handles resizing.
-export type ImageVariant = 'image';
+// New images have two purpose-specific objects. `image` remains for legacy media.
+export type ImageVariant = 'banner' | 'thumbnail' | 'image';
 
 // Video variants (3 variants via FFmpeg)
 export type VideoVariant = 'hd' | 'medium' | 'low';
@@ -37,14 +37,12 @@ export interface MediaMetadata {
   updatedAt: string;
   completedVariants: MediaVariant[];
   variants: Record<string, string>;
-  /** Canonical public URL for single-object image media. */
+  /** Canonical public URL. New image media defaults to the banner variant. */
   url?: string;
   profile?: MediaProfile;
   /**
    * Optional SEO-friendly slug supplied at upload time via the `name` form field.
-   * Image URLs use /media/:id/{slug}.{ext}, retaining the original extension
-   * for passthrough images and using .webp for transformed images.
-   * Other media kinds retain variant URLs: /media/:id/:variant.{ext}.
+   * Image variant URLs use /media/:id/:variant/{slug}.{ext}.
    */
   slug?: string;
   error?: string;

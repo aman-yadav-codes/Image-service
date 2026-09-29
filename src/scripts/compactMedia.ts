@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { compactMediaToCanonicalImage } from '../services/mediaService.js';
 import { optimizeImage } from '../services/imageOptimizer.js';
 import { storage } from '../storage/index.js';
+import { config } from '../config/index.js';
 
 const IMAGE_EXTENSIONS = new Set(['.avif', '.gif', '.jpeg', '.jpg', '.png', '.tif', '.tiff', '.webp']);
 const PREFERRED_SOURCES = ['image.webp', 'large.webp', 'display.webp', 'print.jpg', 'thumbnail.webp'];
@@ -27,7 +28,7 @@ async function convertToCanonicalImage(id: string): Promise<{ before: number; af
   const input = await storage.readFile(id, source);
   const output = source === 'image.webp'
     ? input
-    : await optimizeImage(input);
+    : await optimizeImage(input, config.image.bannerMaxBytes);
 
   if (source !== 'image.webp') {
     await storage.save(id, 'image.webp', output, 'image/webp');

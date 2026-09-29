@@ -184,7 +184,7 @@ GET http://YOUR_SERVER_IP:4001/media/<id>
 
 | Variant | Output | Notes |
 |---|---|---|
-| `image` | Original or WebP | Byte-for-byte passthrough at or below 70 KiB; larger sources use Python target-size compression and aspect-ratio-preserving resize |
+| `image` | Original or WebP | `banner` (60-150 KiB) and `thumbnail` (25-60 KiB); per-variant passthrough below the maximum, otherwise same-dimension Python compression |
 
 ---
 
@@ -264,6 +264,8 @@ MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker  # scale workers
 | `MEDIA_WORKER_REPLICAS` | `4` | Worker containers for high-throughput bulk imports |
 | `MEDIA_WORKER_CONCURRENCY` | `1` | CPU-bound Python jobs per worker process |
 | `IMAGE_WEBP_EFFORT` | `6` | Maximum WebP compression effort to retain the best quality within the hard byte budget |
+| `IMAGE_BANNER_MIN_BYTES` / `IMAGE_BANNER_MAX_BYTES` | `61440` / `153600` | Banner target band |
+| `IMAGE_THUMBNAIL_MIN_BYTES` / `IMAGE_THUMBNAIL_MAX_BYTES` | `25600` / `61440` | Thumbnail target band |
 | `IMAGE_COMPRESSOR_ENGINE` | `pyvips` | High-throughput Python/libvips engine; the service does not use Sharp |
 | `IMAGE_COMPRESSOR_ALLOW_RESIZE` | `false` | Keep original dimensions; do not auto-downscale during compression |
 | `VIPS_CONCURRENCY` | `1` | libvips threads per worker; replicas provide process-level parallelism |

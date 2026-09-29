@@ -76,7 +76,9 @@ export async function handleMediaVariant(req: Request, res: Response, next: Next
       );
     }
 
-    const variant = meta.kind === 'image' ? 'image' : requestedVariant;
+    const variant = meta.kind === 'image' && !meta.variants[requestedVariant] && meta.variants.image
+      ? 'image'
+      : requestedVariant;
     const filename = meta.variants[variant] as string | undefined;
     if (!filename) {
       const available = Object.keys(meta.variants).join(', ') || 'none yet';

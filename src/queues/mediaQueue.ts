@@ -19,7 +19,7 @@ export const mediaQueueEvents = new QueueEvents('media-processing', {
 
 /**
  * Returns the list of variants to process for each media kind.
- *  - image  → 1 canonical optimized image via the Python compressor
+ *  - image  → banner and thumbnail variants via the Python compressor
  *  - video  → 3 variants (hd/720p, medium/480p, low/360p) via FFmpeg
  *  - pdf    → 1 variant  (compressed) via Ghostscript
  *  - excel  → 1 variant  (original — stored as-is, no processing)
@@ -27,7 +27,7 @@ export const mediaQueueEvents = new QueueEvents('media-processing', {
 export function getVariantsForKind(kind: MediaKind, profile: MediaProfile = 'standard'): MediaVariant[] {
   void profile;
   switch (kind) {
-    case 'image': return ['image'];
+    case 'image': return ['banner', 'thumbnail'];
     case 'video': return ['hd', 'medium', 'low'];
     case 'pdf':   return ['compressed'];
     case 'excel': return ['original'];

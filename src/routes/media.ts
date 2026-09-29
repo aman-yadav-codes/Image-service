@@ -34,7 +34,7 @@ mediaRouter.get('/metrics', handleMetrics);
  * @route   POST /media/upload
  * @desc    Upload any file — image, video, PDF, or Excel.
  *          Auto-detects the file type by MIME and routes to the appropriate pipeline:
- *            - Image  → one optimised 1920px WebP source for dynamic CDN resizing
+ *            - Image  → banner and thumbnail variants, or original-byte passthrough
  *            - Video  → transcoded into 3 variants (hd/720p, medium/480p, low/360p) via FFmpeg
  *            - PDF    → compressed via Ghostscript (1 variant: compressed)
  *            - Excel  → stored as-is (no processing), immediately available
@@ -103,13 +103,14 @@ mediaRouter.put('/media/:id', requireAuth, mediaUpload.single('file'), handleMed
  * @route   GET /media/:id/:variant/:seoname
  * @desc    Stream a processed variant by media ID and variant name.
  *
- * Images: /media/:id/{seo-name}.webp (one canonical stored object)
+ * Image variants: banner | thumbnail
  * Video variants:  hd | medium | low
  * PDF variants:    compressed
  * Excel variants:  original
  *
- * Without name field at upload:   /media/:id/image.webp
- * With name="Product Photo":      /media/:id/display/product-photo.webp
+ * Without name field at upload:   /media/:id/banner.webp
+ * With name="Product Photo":      /media/:id/banner/product-photo.webp
+ *                                 /media/:id/thumbnail/product-photo.webp
  *                                 /media/:id/hd/product-photo.mp4
  *                                 /media/:id/compressed/product-photo.pdf
  *                                 /media/:id/original/product-photo.xlsx

@@ -11,7 +11,7 @@ import { storage } from '../storage/index.js';
 import { logger } from '../utils/logger.js';
 import { markMediaVariantCompleted, markMediaFailed } from '../services/mediaService.js';
 import { optimizeImage } from '../services/imageOptimizer.js';
-import type { MediaJobData } from '../types/media.js';
+import type { ImageVariant, MediaJobData } from '../types/media.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -19,14 +19,29 @@ async function run(command: string, args: string[]): Promise<void> {
   await execFileAsync(command, args, { maxBuffer: 1024 * 1024 * 16 });
 }
 
-// ─── Image processing via Python compressor (one canonical object) ────────────
+// ─── Image processing via Python compressor (banner + thumbnail) ──────────────
 
 async function processImage(
   inputBuffer: Buffer,
+  variant: ImageVariant,
+  targetBytes: number,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
-  const outputBuffer = await optimizeImage(inputBuffer);
+  const outputBuffer = await optimizeImage(inputBuffer, targetBytes);
 
-  return { buffer: outputBuffer, filename: 'image.webp', contentType: 'image/webp' };
+  return { buffer: outputBuffer, filename: `${variant}.webp`, contentType: 'image/webp' };
+}
+
+function imageSizeBand(variant: ImageVariant): { minBytes: number; maxBytes: number } {
+  if (variant === 'thumbnail') {
+    return {
+      minBytes: config.image.thumbnailMinBytes,
+      maxBytes: config.image.thumbnailMaxBytes,
+    };
+  }
+  return {
+    minBytes: config.image.bannerMinBytes,
+    maxBytes: config.image.bannerMaxBytes,
+  };
 }
 
 // ─── Video processing via FFmpeg (3 variants) ────────────────────────────────
@@ -109,26 +124,28 @@ const worker = new Worker<MediaJobData>('media-processing', async (job) => {
     await job.updateProgress(20);
 
     if (kind === 'image') {
-      if (buffer.length <= config.image.maxBytes) {
+      const imageVariant = variant as ImageVariant;
+      const sizeBand = imageSizeBand(imageVariant);
+      if (buffer.length <= sizeBand.maxBytes) {
         await markMediaVariantCompleted(mediaId, variant, originalFilename);
         await job.updateProgress(100);
         log.info(
-          { filename: originalFilename, sizeBytes: buffer.length },
+          { filename: originalFilename, sizeBytes: buffer.length, ...sizeBand },
           'Image already within size limit; original stored without transformation',
         );
         return;
       }
 
-      // ── Image: write temp file, compress through Python, save canonical WebP
-      const { buffer: outBuf, filename, contentType } = await processImage(buffer);
+      const { buffer: outBuf, filename, contentType } = await processImage(
+        buffer,
+        imageVariant,
+        sizeBand.maxBytes,
+      );
       await job.updateProgress(85);
       await storage.save(mediaId, filename, outBuf, contentType);
       await markMediaVariantCompleted(mediaId, variant, filename);
-      await storage.deleteFile(mediaId, originalFilename).catch((err: unknown) => {
-        log.warn({ err, originalFilename }, 'Image original cleanup failed');
-      });
       await job.updateProgress(100);
-      log.info({ filename }, 'Image variant saved');
+      log.info({ filename, sizeBytes: outBuf.length, ...sizeBand }, 'Image variant saved');
       return;
     }
 
