@@ -263,7 +263,7 @@ MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker  # scale workers
 | `MEDIA_MAX_FILE_SIZE_BYTES` | `524288000` | Upload limit (500 MB) |
 | `MEDIA_WORKER_REPLICAS` | `4` | Worker containers for high-throughput bulk imports |
 | `MEDIA_WORKER_CONCURRENCY` | `1` | CPU-bound Python jobs per worker process |
-| `IMAGE_WEBP_EFFORT` | `4` | WebP encoding effort; bulk-import default balances speed and output size |
+| `IMAGE_WEBP_EFFORT` | `0` | Fastest WebP encoding; native target-size mode keeps bulk imports within the byte budget |
 | `IMAGE_COMPRESSOR_ENGINE` | `pyvips` | High-throughput Python/libvips engine; the service does not use Sharp |
 | `IMAGE_COMPRESSOR_ALLOW_RESIZE` | `false` | Keep original dimensions; do not auto-downscale during compression |
 | `VIPS_CONCURRENCY` | `1` | libvips threads per worker; replicas provide process-level parallelism |

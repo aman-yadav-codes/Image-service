@@ -117,14 +117,17 @@ class ImageCompressor:
     # -------------------------------------------------------------------------
     # PyVips Encoding Helpers
     # -------------------------------------------------------------------------
-    def _encode_pyvips(self, vips_img, q: int) -> bytes:
+    def _encode_pyvips(self, vips_img, q: int, target_bytes: Optional[int] = None) -> bytes:
         """Encode a PyVips Image to WebP bytes."""
-        return vips_img.webpsave_buffer(
-            Q=int(q),
-            effort=self.effort,
-            smart_subsample=self.smart_subsample,
-            strip=self.strip_metadata
-        )
+        options = {
+            "Q": int(q),
+            "effort": self.effort,
+            "smart_subsample": self.smart_subsample,
+            "strip": self.strip_metadata,
+        }
+        if target_bytes is not None:
+            options.update(target_size=target_bytes, passes=2)
+        return vips_img.webpsave_buffer(**options)
 
     # -------------------------------------------------------------------------
     # Binary Search for Quality Level
@@ -243,6 +246,12 @@ class ImageCompressor:
             if fixed_quality is not None:
                 best_data = self._encode_pyvips(curr_img, fixed_quality)
                 chosen_q = fixed_quality
+            elif not self.allow_resize:
+                # Let libwebp target the byte budget natively. This avoids decoding
+                # and encoding the same image for every Python quality-search step.
+                best_data = self._encode_pyvips(curr_img, self.max_q, target_bytes)
+                chosen_q = self.max_q
+                history.append((self.max_q, len(best_data)))
             else:
                 # 1. Search quality on original dimensions
                 q, data, hist = self._search_quality(
