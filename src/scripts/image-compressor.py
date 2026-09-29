@@ -231,10 +231,8 @@ class ImageCompressor:
         # Execution with PyVips
         # ---------------------------------------------------------------------
         if self.engine == "pyvips" and PYVIPS_AVAILABLE:
-            vips_img = pyvips.Image.new_from_file(str(input_p), access="sequential")
-            if self.allow_resize:
-                # The resize fallback can encode repeatedly while searching quality.
-                vips_img = vips_img.copy_memory()
+            access_mode = "sequential" if fixed_quality is not None else "random"
+            vips_img = pyvips.Image.new_from_file(str(input_p), access=access_mode)
             orig_dims = (vips_img.width, vips_img.height)
             if max_pixels is not None and orig_dims[0] * orig_dims[1] > max_pixels:
                 raise ValueError(f"Image has {orig_dims[0] * orig_dims[1]} pixels, above max_pixels={max_pixels}")
@@ -248,11 +246,18 @@ class ImageCompressor:
                 best_data = self._encode_pyvips(curr_img, fixed_quality)
                 chosen_q = fixed_quality
             elif not self.allow_resize:
-                # Let libwebp target the byte budget natively. This avoids decoding
-                # and encoding the same image for every Python quality-search step.
+                # Native target sizing is fast but is only a hint in some libwebp
+                # builds. Validate it and fall back to an exact quality search.
                 best_data = self._encode_pyvips(curr_img, self.max_q, target_bytes)
                 chosen_q = self.max_q
                 history.append((self.max_q, len(best_data)))
+                if len(best_data) > target_bytes:
+                    q, data, hist = self._search_quality(
+                        curr_img, target_bytes, self.min_q, self.max_q, self._encode_pyvips
+                    )
+                    history.extend(hist)
+                    best_data = data
+                    chosen_q = q
             else:
                 # 1. Search quality on original dimensions
                 q, data, hist = self._search_quality(
@@ -344,6 +349,12 @@ class ImageCompressor:
                             chosen_q = q
 
         # Write final bytes to disk
+        if len(best_data) > target_bytes:
+            raise ValueError(
+                f"Cannot meet {target_bytes}-byte target within configured quality and dimension limits; "
+                f"smallest output is {len(best_data)} bytes"
+            )
+
         output_p.write_bytes(best_data)
         elapsed = time.time() - t_start
         final_size = len(best_data)
