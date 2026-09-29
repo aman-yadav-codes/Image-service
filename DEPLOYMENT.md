@@ -184,7 +184,7 @@ GET http://YOUR_SERVER_IP:4001/media/<id>
 
 | Variant | Output | Notes |
 |---|---|---|
-| `image` | WebP | Python compressor, same pixel dimensions as the uploaded source, target-size quality search when possible |
+| `image` | Original or WebP | Byte-for-byte passthrough at or below 70 KiB; larger sources use Python target-size compression and aspect-ratio-preserving resize |
 
 ---
 

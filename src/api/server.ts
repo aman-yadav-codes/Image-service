@@ -20,11 +20,13 @@ async function start(): Promise<void> {
       const data = job.data as MediaJobData;
       const { mediaId, kind, variant } = data;
 
+      // The image worker records the actual canonical filename. It may be the
+      // untouched original for uploads already within the configured size cap.
+      if (kind === 'image') return;
+
       // Determine the storage filename based on kind + variant
       let filename: string;
-      if (kind === 'image') {
-        filename = 'image.webp';
-      } else if (kind === 'video') {
+      if (kind === 'video') {
         filename = `${variant}.mp4`;
       } else if (kind === 'pdf') {
         filename = 'compressed.pdf';

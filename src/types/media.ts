@@ -42,8 +42,8 @@ export interface MediaMetadata {
   profile?: MediaProfile;
   /**
    * Optional SEO-friendly slug supplied at upload time via the `name` form field.
-   * Image URLs use /media/:id/{slug}.webp. Other media kinds retain variants.
-   * When an image slug is not set, its URL is /media/:id/image.webp.
+   * Image URLs use /media/:id/{slug}.{ext}, retaining the original extension
+   * for passthrough images and using .webp for transformed images.
    * Other media kinds retain variant URLs: /media/:id/:variant.{ext}.
    */
   slug?: string;

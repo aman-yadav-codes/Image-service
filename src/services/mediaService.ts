@@ -479,9 +479,10 @@ function extractError(msg: string): string {
 
 function toResponse(meta: MediaMetadata): MediaResponse {
   if (meta.kind === 'image' && meta.variants.image) {
+    const ext = path.extname(meta.variants.image) || '.webp';
     const url = meta.slug
-      ? `/media/${meta.id}/${meta.slug}.webp`
-      : `/media/${meta.id}/image.webp`;
+      ? `/media/${meta.id}/${meta.slug}${ext}`
+      : `/media/${meta.id}/image${ext}`;
     return { ...meta, url, variants: { image: url } };
   }
   const variantUrls = Object.fromEntries(

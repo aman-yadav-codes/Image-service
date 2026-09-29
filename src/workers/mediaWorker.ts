@@ -109,6 +109,16 @@ const worker = new Worker<MediaJobData>('media-processing', async (job) => {
     await job.updateProgress(20);
 
     if (kind === 'image') {
+      if (buffer.length <= config.image.maxBytes) {
+        await markMediaVariantCompleted(mediaId, variant, originalFilename);
+        await job.updateProgress(100);
+        log.info(
+          { filename: originalFilename, sizeBytes: buffer.length },
+          'Image already within size limit; original stored without transformation',
+        );
+        return;
+      }
+
       // ── Image: write temp file, compress through Python, save canonical WebP
       const { buffer: outBuf, filename, contentType } = await processImage(buffer);
       await job.updateProgress(85);
