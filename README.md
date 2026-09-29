@@ -55,7 +55,7 @@ Excel files are stored as `original` and marked complete immediately.
 
 ## Scaling
 
-Workers share one BullMQ queue, so concurrent uploads are automatically distributed across idle worker containers. The defaults run two replicas with one job per replica and a `0.75` CPU limit each, keeping transformation load bounded on a four-core VPS.
+Workers share one BullMQ queue, so concurrent uploads are automatically distributed across idle worker containers. The bulk-import defaults run four replicas with one job per replica and a `0.75` CPU limit each. Pillow WebP effort defaults to `4`, which provides substantially faster encoding than effort `6` while preserving the original pixel dimensions.
 
 ```bash
 docker compose up -d --build

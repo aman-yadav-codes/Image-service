@@ -261,10 +261,12 @@ MEDIA_WORKER_REPLICAS=4 docker compose up -d media-worker  # scale workers
 | `MINIO_BUCKET` | `media` | Storage bucket name |
 | `MINIO_PUBLIC_ENDPOINT` | — | Browser-accessible MinIO URL |
 | `MEDIA_MAX_FILE_SIZE_BYTES` | `524288000` | Upload limit (500 MB) |
-| `MEDIA_WORKER_CONCURRENCY` | `2` | Jobs per worker process |
+| `MEDIA_WORKER_REPLICAS` | `4` | Worker containers for high-throughput bulk imports |
+| `MEDIA_WORKER_CONCURRENCY` | `1` | CPU-bound Python jobs per worker process |
+| `IMAGE_WEBP_EFFORT` | `4` | WebP encoding effort; bulk-import default balances speed and output size |
 | `IMAGE_COMPRESSOR_ENGINE` | `pillow` | Image compressor engine; use `pillow` for VPS independence from libvips/sharp |
 | `IMAGE_COMPRESSOR_ALLOW_RESIZE` | `false` | Keep original dimensions; do not auto-downscale during compression |
 | `JOB_MAX_RETRIES` | `3` | Max retry attempts |
-| `WORKER_CPU_LIMIT` | `1.0` | CPU limit per worker container |
-| `WORKER_MEMORY_LIMIT` | `512M` | Memory limit per worker container |
+| `MEDIA_WORKER_CPU_LIMIT` | `0.75` | CPU limit per worker container |
+| `MEDIA_WORKER_MEMORY_LIMIT` | `1G` | Memory limit per worker container |
 | `DATA_ROOT` | `/srv/media-service` | Host path for persistent storage |

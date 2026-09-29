@@ -36,7 +36,7 @@ export const config = {
     maxMetadataSize: optionalNumber('MAX_METADATA_SIZE', 1048576),
     maxWidth: optionalNumber('IMAGE_MAX_WIDTH', 1920),
     webpQuality: optionalNumber('IMAGE_WEBP_QUALITY', 96),
-    webpEffort: optionalIntRange('IMAGE_WEBP_EFFORT', 6, 0, 6),
+    webpEffort: optionalIntRange('IMAGE_WEBP_EFFORT', 4, 0, 6),
     preferredMinBytes: optionalNumber('IMAGE_PREFERRED_MIN_BYTES', 50 * 1024),
     maxBytes: optionalNumber('IMAGE_MAX_BYTES', 70 * 1024),
     pythonBinary: optional('IMAGE_COMPRESSOR_PYTHON', process.platform === 'win32' ? 'python' : 'python3'),
