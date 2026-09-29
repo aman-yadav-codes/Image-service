@@ -231,9 +231,10 @@ class ImageCompressor:
         # Execution with PyVips
         # ---------------------------------------------------------------------
         if self.engine == "pyvips" and PYVIPS_AVAILABLE:
-            # Quality search encodes the same decoded pixels several times. Keep a
-            # memory-backed copy so sequential JPEG loaders are not read out of order.
-            vips_img = pyvips.Image.new_from_file(str(input_p), access="random").copy_memory()
+            vips_img = pyvips.Image.new_from_file(str(input_p), access="sequential")
+            if self.allow_resize:
+                # The resize fallback can encode repeatedly while searching quality.
+                vips_img = vips_img.copy_memory()
             orig_dims = (vips_img.width, vips_img.height)
             if max_pixels is not None and orig_dims[0] * orig_dims[1] > max_pixels:
                 raise ValueError(f"Image has {orig_dims[0] * orig_dims[1]} pixels, above max_pixels={max_pixels}")
